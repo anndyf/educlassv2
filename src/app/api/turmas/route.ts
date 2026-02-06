@@ -1,0 +1,82 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { randomUUID } from 'crypto'
+
+export const runtime = 'nodejs'
+
+import { getTurmasPermitidas } from '@/lib/data-fetching'
+
+// GET all turmas (filtered by permissions)
+export async function GET() {
+  try {
+    const session = await auth()
+    
+    if (!session) {
+      return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
+    }
+
+    const turmas = await getTurmasPermitidas(session)
+
+    return NextResponse.json(turmas)
+  } catch (error) {
+    console.error('Erro ao buscar turmas:', error)
+    return NextResponse.json(
+      { message: 'Erro ao buscar turmas' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST create turma
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth()
+    
+    if (!session) {
+      return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
+    }
+
+    const { nome, curso, turno, modalidade, serie, numero } = await request.json()
+
+    if (!nome || nome.trim() === '') {
+      return NextResponse.json(
+        { message: 'Nome da turma é obrigatório' },
+        { status: 400 }
+      )
+    }
+
+    try {
+      const turma = await prisma.turma.create({
+        data: { 
+          nome: nome.trim(),
+          curso: curso?.trim(),
+          turno: turno?.trim(),
+          modalidade: modalidade?.trim(),
+          serie: serie?.toString(),
+          numero: numero ? parseInt(numero.toString()) : null
+        }
+      })
+      return NextResponse.json(turma, { status: 201 })
+    } catch (prismaError: any) {
+      console.warn('Prisma falhou ao criar turma, tentando SQL bruto...', prismaError.message)
+      
+      const id = randomUUID()
+      const now = new Date()
+      const numVal = numero ? parseInt(numero.toString()) : null
+      
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "turmas" (id, nome, curso, turno, modalidade, serie, numero, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, id, nome.trim(), curso?.trim(), turno?.trim(), modalidade?.trim(), serie?.toString(), numVal, now, now)
+
+      return NextResponse.json({ id, nome, message: 'Turma criada via SQL' }, { status: 201 })
+    }
+  } catch (error) {
+    console.error('Erro ao criar turma:', error)
+    return NextResponse.json(
+      { message: 'Erro ao criar turma' },
+      { status: 500 }
+    )
+  }
+}

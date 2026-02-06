@@ -1,0 +1,95 @@
+import NextAuth from "next-auth"
+import type { NextAuthConfig } from "next-auth"
+import Credentials from "next-auth/providers/credentials"
+import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
+
+// Force Node.js runtime (not Edge)
+export const runtime = 'nodejs'
+
+export const authConfig: NextAuthConfig = {
+  providers: [
+    Credentials({
+      credentials: {
+        username: { label: "Usuário", type: "text" },
+        password: { label: "Senha", type: "password" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.username || !credentials?.password) {
+          return null
+        }
+
+        const user = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { username: credentials.username as string },
+              { email: credentials.username as string }
+            ]
+          }
+        })
+
+        if (!user) {
+          return null
+        }
+
+        if (!user.isActive) {
+          throw new Error('Acesso pausado. Entre em contato com a administração.')
+        }
+
+        const passwordMatch = await bcrypt.compare(
+          credentials.password as string,
+          user.password
+        )
+
+        if (!passwordMatch) {
+          return null
+        }
+
+        // Atualizar data do último acesso via SQL para contornar cache de schema
+        await prisma.$executeRaw`
+          UPDATE users SET last_login = NOW() WHERE id = ${user.id}
+        `
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name || user.username,
+          username: user.username,
+          isSuperuser: user.isSuperuser,
+          isDirecao: user.isDirecao,
+          isStaff: user.isStaff
+        }
+      }
+    })
+  ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id
+        token.username = (user as any).username
+        token.isSuperuser = (user as any).isSuperuser
+        token.isDirecao = (user as any).isDirecao
+        token.isStaff = (user as any).isStaff
+      }
+      return token
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string
+        session.user.username = token.username as string
+        session.user.isSuperuser = token.isSuperuser as boolean
+        session.user.isDirecao = token.isDirecao as boolean
+        session.user.isStaff = token.isStaff as boolean
+      }
+      return session
+    }
+  },
+  pages: {
+    signIn: "/login"
+  },
+  session: {
+    strategy: "jwt"
+  }
+}
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authConfig)

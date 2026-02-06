@@ -1,0 +1,169 @@
+"use client"
+
+import { useState } from "react"
+import { X, Save, Loader2, GraduationCap, Layers, Clock, Hash } from "lucide-react"
+
+interface CursoModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onSuccess: (curso: any) => void
+}
+
+export default function CursoModal({ isOpen, onClose, onSuccess }: CursoModalProps) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [formData, setFormData] = useState({
+    nome: "",
+    sigla: "",
+    modalidade: "EPTNM",
+    turnos: [] as string[]
+  })
+
+  if (!isOpen) return null
+
+  const handleToggleTurno = (turno: string) => {
+    setFormData(prev => ({
+      ...prev,
+      turnos: prev.turnos.includes(turno) 
+        ? prev.turnos.filter(t => t !== turno)
+        : [...prev.turnos, turno]
+    }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (formData.turnos.length === 0) {
+      setError("Selecione pelo menos um turno")
+      return
+    }
+    
+    setLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch('/api/cursos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        onSuccess(data)
+        onClose()
+      } else {
+        const data = await response.json()
+        setError(data.message || 'Erro ao criar curso')
+      }
+    } catch (err) {
+      setError('Erro ao conectar com o servidor')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-300">
+        <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-500 rounded-xl">
+              <GraduationCap className="w-5 h-5 text-white" />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">Novo Curso</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+          {error && (
+            <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs font-bold animate-in slide-in-from-top-2">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="group">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome do Curso</label>
+              <input 
+                required type="text" placeholder="Ex: Técnico em Meio Ambiente"
+                value={formData.nome}
+                onChange={e => {
+                  const nome = e.target.value
+                  const words = nome.split(' ').filter(w => !['de', 'da', 'do', 'e', 'o', 'a', 'em', 'dos', 'das'].includes(w.toLowerCase()))
+                  let autoSigla = ""
+                  if (words.length >= 2) {
+                    autoSigla = ((words[0]?.[0] || "") + (words[1]?.[0] || "")).toUpperCase()
+                  } else if (words.length === 1) {
+                    autoSigla = (words[0]?.[0] || "").toUpperCase()
+                  }
+                  setFormData({...formData, nome, sigla: autoSigla})
+                }}
+                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-slate-700 focus:bg-white focus:border-blue-500 transition-all"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="group">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Sigla (Nomenclatura)</label>
+                <div className="relative">
+                  <input 
+                    required type="text" placeholder="Ex: MA" maxLength={4}
+                    value={formData.sigla}
+                    onChange={e => setFormData({...formData, sigla: e.target.value.toUpperCase()})}
+                    className="w-full pl-10 pr-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-slate-700 focus:bg-white focus:border-blue-500 transition-all"
+                  />
+                  <Hash className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+
+              <div className="group">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Modalidade</label>
+                <select 
+                  value={formData.modalidade}
+                  onChange={e => setFormData({...formData, modalidade: e.target.value})}
+                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-slate-700 focus:bg-white focus:border-blue-500 transition-all appearance-none"
+                >
+                  <option value="EPTNM">EPTNM</option>
+                  <option value="PROEJA">PROEJA</option>
+                  <option value="PROSUB">PROSUB</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Turnos Disponíveis</label>
+              <div className="flex flex-wrap gap-2">
+                {["Matutino", "Vespertino", "Noturno", "Integral"].map(t => (
+                  <button
+                    key={t} type="button"
+                    onClick={() => handleToggleTurno(t)}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${
+                      formData.turnos.includes(t) 
+                      ? 'bg-blue-500 text-white shadow-lg' 
+                      : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 flex space-x-3">
+             <button
+              type="submit" disabled={loading}
+              className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-sm flex items-center justify-center space-x-2 hover:bg-slate-800 transition-all disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              <span>Cadastrar Curso</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
