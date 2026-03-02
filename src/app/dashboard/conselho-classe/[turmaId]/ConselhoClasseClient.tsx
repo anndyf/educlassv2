@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Save, AlertCircle, Gavel, Loader2, ChevronDown, ChevronUp, CheckCircle2, Printer } from "lucide-react"
+import { ArrowLeft, Save, AlertCircle, Gavel, Loader2, ChevronDown, ChevronUp, CheckCircle2, Printer, X } from "lucide-react"
 
 interface NotaConselho {
   id: string
@@ -61,6 +61,7 @@ export default function ConselhoClasseClient({
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [showInstructions, setShowInstructions] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
 
   const toggleStudent = (id: string) => {
     const newExpanded = new Set(expandedStudents)
@@ -127,9 +128,14 @@ export default function ConselhoClasseClient({
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setShowConfirmModal(true)
+  }
+
+  const handleConfirmSave = async () => {
     setLoading(true)
+    setShowConfirmModal(false)
     setMessage(null)
 
     try {
@@ -374,13 +380,13 @@ export default function ConselhoClasseClient({
         <table className="print-table w-full border-collapse text-[9px]">
           <thead>
             <tr>
-              <th className="border border-gray-400 px-2 bg-gray-200 font-black text-center text-[8px]" style={{minWidth: '120px', maxWidth: '120px', width: '120px', height: '120px', verticalAlign: 'middle'}}>
+              <th className="border border-gray-400 px-2 bg-gray-200 font-black text-center text-[8px]" style={{minWidth: '120px', maxWidth: '120px', width: '120px', height: '100px', verticalAlign: 'middle'}}>
                 <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%'}}>
                   ESTUDANTE
                 </div>
               </th>
               {disciplinas.map((disc) => (
-                <th key={disc} className="border border-gray-400 bg-gray-200 font-black text-center" style={{minWidth: '20px', maxWidth: '20px', width: '20px', height: '120px', padding: '8px 0'}}>
+                <th key={disc} className="border border-gray-400 bg-gray-200 font-black text-center" style={{minWidth: '20px', maxWidth: '20px', width: '20px', height: '100px', padding: '8px 0'}}>
                   <div style={{
                     writingMode: 'vertical-rl',
                     transform: 'rotate(180deg)',
@@ -865,6 +871,82 @@ export default function ConselhoClasseClient({
             </div>
           </div>
         </form>
+        {/* Modal de Confirmação */}
+        {showConfirmModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Revisar Decisões</h3>
+                  <p className="text-xs font-bold text-slate-400 mt-1">Confira os dados antes de consolidar no sistema</p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+              
+              <div className="p-8 overflow-y-auto flex-1 custom-scrollbar">
+                <div className="bg-slate-50 rounded-3xl border border-slate-200 overflow-hidden shadow-inner font-mono">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-200/50 text-slate-500 font-bold uppercase text-[10px] tracking-widest">
+                      <tr>
+                        <th className="px-6 py-4">Estudante / Disciplina</th>
+                        <th className="px-6 py-4 text-center">Nota Rec.</th>
+                        <th className="px-6 py-4 text-center">Decisão</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {Object.entries(decisoes).map(([notaId, status]) => {
+                        const nota = notasConselho.find(n => n.id === notaId)
+                        if (!nota) return null
+                        
+                        const statusOpt = STATUS_OPTIONS.find(o => o.value === status)
+                        const notaRecVal = notasRec[notaId]
+
+                        return (
+                          <tr key={notaId}>
+                            <td className="px-6 py-4">
+                              <p className="font-black text-slate-900 text-xs uppercase">{nota.estudanteNome}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{nota.disciplinaNome}</p>
+                            </td>
+                            <td className="px-6 py-4 text-center font-black text-slate-700 text-xs">
+                              {notaRecVal !== null && notaRecVal !== undefined ? notaRecVal.toFixed(1) : '-'}
+                            </td>
+                            <td className={`px-6 py-4 text-center text-[10px] font-black uppercase tracking-widest ${statusOpt?.color || 'text-slate-900'}`}>
+                              {statusOpt?.label || status}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="p-8 border-t border-slate-100 flex justify-end space-x-4 bg-slate-50 rounded-b-[2.5rem]">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  className="px-8 py-3 rounded-2xl font-bold text-slate-500 hover:bg-white transition-all text-sm uppercase tracking-widest"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmSave}
+                  className="px-10 py-3 rounded-2xl bg-pink-600 text-white font-black uppercase tracking-widest hover:bg-pink-700 shadow-xl shadow-pink-200 transition-all flex items-center space-x-3 active:scale-95 text-xs"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Gravar Permanentemente</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
     </>

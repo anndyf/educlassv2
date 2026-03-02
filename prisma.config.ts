@@ -9,6 +9,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Remove quotes if present in the environment variable
+    url: (process.env["DATABASE_URL"]?.replace(/^"|"$/g, '').replace(/^'|'$/g, '') || "") as string,
   },
 });

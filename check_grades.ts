@@ -24,11 +24,11 @@ async function main() {
   }
 
   const student = students[0]
-  console.log('Student:', student.nome, student.id)
+  console.log('Student:', student.nome, student.matricula)
 
   console.log('Fetching Notas for student...')
   const notas = await prisma.notaFinal.findMany({
-    where: { estudanteId: student.id }
+    where: { estudanteId: student.matricula }
   })
   
   console.log('Notas found:', notas.length)

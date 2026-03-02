@@ -2,7 +2,9 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { ArrowLeft, Printer } from "lucide-react"
+import { ArrowLeft, Download, CheckCircle2, FileText, GraduationCap, AlertTriangle, TrendingDown, Info, Printer } from "lucide-react"
+import TeacherTipsModal from "@/components/TeacherTipsModal"
+import { analyzeRisk } from "@/lib/risk-analysis"
 
 interface Disciplina {
   id: string
@@ -26,7 +28,7 @@ interface NotaResultado {
   disciplinaNome: string
 }
 
-type UnitOption = 'UNIDADE_1' | 'UNIDADE_2' | 'UNIDADE_3' | 'FINAL'
+type UnitOption = 'FINAL' | 'UNIDADE_1' | 'UNIDADE_2' | 'UNIDADE_3'
 
 export default function ResultadosTurmaClient({
   turmaId,
@@ -40,54 +42,120 @@ export default function ResultadosTurmaClient({
   initialNotas: NotaResultado[]
 }) {
   const [selectedUnit, setSelectedUnit] = useState<UnitOption>('FINAL')
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null)
 
-  // Helper para calcular status/cor
-  const calculateCellData = (n: NotaResultado | undefined, unit: UnitOption) => {
-    if (!n) return { value: '-', color: 'bg-white', textClass: 'text-gray-300' }
-
-    // Caso 1: Desistência Geral da Disciplina
-    if (n.status === 'DESISTENTE') {
-      return { value: 'DES', color: 'bg-gray-100 print:bg-gray-200', textClass: 'text-gray-500 font-bold' }
+  const abreviarNome = (nome: string) => {
+    const nomeUpper = nome.toUpperCase()
+    const mapa: Record<string, string> = {
+      'ALGORITMOS E LINGUAGEM DE PROGRAMAÇÃO': 'Algoritmos e Linguagem P.',
+      'FUNDAMENTOS DA COMPUTAÇÃO': 'Fund. da Computação',
+      'INICIAÇÃO CIENTÍFICA': 'Inic. Científica',
+      'LÍNGUA PORTUGUESA': 'Português',
+      'EDUCAÇÃO FÍSICA': 'Ed. Física',
+      'BANCO DE DADOS': 'Banco de Dados',
+      'EDUCAÇÃO DIGITAL E MIDIÁTICA': 'Ed. Digital e Midiática',
+      'HISTÓRIA DA BAHIA': 'Hist. da Bahia',
+      'FUNDAMENTOS DE ARQUITETURA DE COMPUTADORES': 'Arq. de Computadores',
+      'PROJETO TECNOLOGIAS SOCIAIS': 'Tec. Sociais'
     }
 
-    let value: number | string = '-'
-    let isPositive = false
-
-    if (unit === 'UNIDADE_1') {
-      if (n.isDesistenteUnid1) return { value: 'DES', color: 'bg-gray-100 print:bg-gray-200', textClass: 'text-gray-500 font-bold' }
-      value = n.nota1 ?? '-'
-    } else if (unit === 'UNIDADE_2') {
-      if (n.isDesistenteUnid2) return { value: 'DES', color: 'bg-gray-100 print:bg-gray-200', textClass: 'text-gray-500 font-bold' }
-      value = n.nota2 ?? '-'
-    } else if (unit === 'UNIDADE_3') {
-      if (n.isDesistenteUnid3) return { value: 'DES', color: 'bg-gray-100 print:bg-gray-200', textClass: 'text-gray-500 font-bold' }
-      value = n.nota3 ?? '-'
-    } else { // FINAL
-      // Caso todas as unidades sejam 'DES', a final é 'DES'
-      if (n.isDesistenteUnid1 && n.isDesistenteUnid2 && n.isDesistenteUnid3) {
-        return { value: 'DES', color: 'bg-gray-100 print:bg-gray-200', textClass: 'text-gray-500 font-bold' }
-      }
-      
-      // Se houver algum DES, a média já veio calculada do banco
-      value = n.nota
+    if (mapa[nomeUpper]) return mapa[nomeUpper]
+    if (nome.length > 25) {
+      return nome.substring(0, 22) + '...'
     }
-
-    if (value === '-') {
-      return { value: '-', color: 'bg-white', textClass: 'text-gray-300' }
-    }
-
-    isPositive = (value as number) >= 5
-
-    const formattedValue = typeof value === 'number' ? value.toFixed(1).replace('.', ',') : value
-
-    // Cores modernas (Pastel) para tela, e forçar print-color-adjust
-    const bgColor = isPositive ? 'bg-blue-100 print:bg-gray-100' : 'bg-red-100 print:bg-gray-300'
-    const textColor = isPositive ? 'text-blue-900 print:text-black' : 'text-red-900 print:text-black'
-
-    return { value: formattedValue, color: bgColor, textClass: textColor }
+    return nome
   }
 
-  // Organizar dados em matriz
+  const getStatusConfig = (status: string, notaValue?: number) => {
+    // Se for modo numérico (Unidades)
+    if (status === 'NUMERIC') {
+        if (notaValue === undefined || notaValue === null) return { color: 'text-slate-300', text: 'font-normal', label: '-' }
+        if (notaValue >= 5) return { color: 'text-emerald-600', text: 'font-bold', label: notaValue.toFixed(1) }
+        return { color: 'text-rose-600', text: 'font-bold', label: notaValue.toFixed(1) }
+    }
+
+    // Modo Status (Final)
+    switch (status) {
+      case 'AP':
+      case 'APROVADO':
+        return { color: 'bg-emerald-500', text: 'text-white', label: 'AP' }
+      case 'RC':
+      case 'RECUPERACAO':
+      case 'RECU_FINAL':
+        return { color: 'bg-amber-500', text: 'text-white', label: 'RC' }
+      case 'AR':
+      case 'APROVADO_RECUPERACAO':
+        return { color: 'bg-emerald-600', text: 'text-white', label: 'AR' }
+      case 'AC':
+      case 'APROVADO_CONSELHO':
+      case 'CONSELHO':
+        return { color: 'bg-blue-600', text: 'text-white', label: 'AC' }
+      case 'DP':
+      case 'DEPENDENCIA':
+        return { color: 'bg-rose-600', text: 'text-white', label: 'DP' }
+      case 'DS':
+      case 'DESISTENTE':
+        return { color: 'bg-slate-800', text: 'text-white', label: 'DS' }
+      case 'CO':
+      case 'CONSERVADO':
+        return { color: 'bg-slate-400', text: 'text-white', label: 'CO' }
+      default:
+        return { color: 'bg-slate-100', text: 'text-slate-400', label: '-' }
+    }
+  }
+
+  const renderCellContent = (n: NotaResultado | undefined) => {
+    if (!n) return <span className="text-slate-200">/</span>
+
+    if (selectedUnit === 'FINAL') {
+        let label = '-'
+        let statusKey = n.status
+
+        // Lógica de exibição do status
+        const isPositive = n.nota >= 5
+        if (n.status === 'APROVADO' || isPositive) { statusKey = 'APROVADO'; label = 'AP'; }
+        else if (n.status === 'RECU_FINAL' || !isPositive) { statusKey = 'RECUPERACAO'; label = 'RC'; }
+        
+        if (n.status === 'CONSELHO') { statusKey = 'CONSELHO'; label = 'AC'; }
+        if (n.status === 'DESISTENTE') { statusKey = 'DESISTENTE'; label = 'DS'; }
+        
+        const config = getStatusConfig(statusKey)
+        
+        return (
+            <span className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold ${config.color} ${config.text} shadow-sm`}>
+              {label}
+            </span>
+        )
+    }
+
+    // Lógica para Unidades
+    let value: number | null | undefined = null
+    let isDesistente = false
+
+    if (selectedUnit === 'UNIDADE_1') {
+        value = n.nota1
+        isDesistente = !!n.isDesistenteUnid1
+    } else if (selectedUnit === 'UNIDADE_2') {
+        value = n.nota2
+        isDesistente = !!n.isDesistenteUnid2
+    } else if (selectedUnit === 'UNIDADE_3') {
+        value = n.nota3
+        isDesistente = !!n.isDesistenteUnid3
+    }
+
+    if (isDesistente) return <span className="text-slate-900 font-bold text-xs">DS</span>
+    
+    if (value === null || value === undefined) return <span className="text-slate-300">-</span>
+    
+    const config = getStatusConfig('NUMERIC', value)
+    
+    return (
+        <span className={`text-xs ${config.color} ${config.text}`}>
+            {config.label}
+        </span>
+    )
+  }
+
   const matrixData = useMemo(() => {
     const estudantesMap = new Map<string, { id: string, nome: string, notas: Record<string, NotaResultado> }>()
 
@@ -105,228 +173,228 @@ export default function ResultadosTurmaClient({
     return Array.from(estudantesMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
   }, [initialNotas])
 
+  const resultTips = [
+    {
+      title: "Visualização Premium",
+      description: "Agora você tem uma visão unificada e moderna dos resultados.",
+      icon: <CheckCircle2 className="w-10 h-10 text-emerald-600" />,
+      color: "bg-emerald-600"
+    }
+  ]
+
   return (
-    <div className="min-h-screen bg-white print:bg-white flex flex-col p-4 sm:p-8 print:p-0 print:block overflow-x-hidden">
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: landscape;
-            margin: 10mm 10mm;
-          }
-          body {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-            margin: 0;
-            padding: 0;
-          }
-          /* Remove background colors and shadows that might interfere */
-          .print-no-bg { background-color: transparent !important; }
-          
-          /* Ensure the title and table stay together */
-          header {
-            display: block !important;
-            page-break-after: avoid !important;
-            break-after: avoid !important;
-            margin-bottom: 10px !important;
-          }
-
-          /* Reset all containers that might have flex/grid which breaks page flow */
-          div:not(.hidden):not(.print\:hidden), main:not(.hidden):not(.print\:hidden), section:not(.hidden):not(.print\:hidden) {
-            display: block !important;
-            position: static !important;
-            overflow: visible !important;
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
-          }
-
-          table {
-            display: table !important;
-            width: 100% !important;
-            border-collapse: collapse !important;
-            page-break-before: avoid !important;
-            break-before: avoid !important;
-          }
-
-          thead {
-            display: table-header-group !important;
-          }
-
-          tr {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-
-          .no-print-sticky {
-            position: static !important;
-            outline: none !important;
-            background-color: white !important;
-          }
-        }
-      `}</style>
+    <div className="min-h-screen bg-[#fcfcfd]">
+      <TeacherTipsModal storageKey="seen_tips_resultados_v2" title="Novo Visual de Resultados" tips={resultTips} />
       
-      {/* Header Fixo */}
-      <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:mb-4 print:flex-col print:items-start">
-        <div className="flex items-center space-x-4">
-          <Link
-            href="/dashboard/resultados"
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors print:hidden"
-            title="Voltar"
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 leading-none print:text-xl uppercase">
-              Resultados - {turmaNome}
-              <span className="hidden print:inline ml-2 text-gray-700">
-                - {selectedUnit === 'FINAL' ? 'FINAL' : (
-                  selectedUnit === 'UNIDADE_1' ? 'I UNIDADE' :
-                  selectedUnit === 'UNIDADE_2' ? 'II UNIDADE' :
-                  selectedUnit === 'UNIDADE_3' ? 'III UNIDADE' : selectedUnit
-                )}
-              </span>
-            </h1>
-            <p className="text-sm text-gray-500 mt-1 print:hidden">
-              Relatório de Notas - {selectedUnit.replace('UNIDADE_', 'Unidade ').replace('FINAL', 'Final')}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-3 print:hidden">
-           {/* Unit Selector */}
-           <div className="flex bg-gray-100 p-1 rounded-lg">
-              {(['UNIDADE_1', 'UNIDADE_2', 'UNIDADE_3', 'FINAL'] as UnitOption[]).map((unit) => (
-                <button
-                  key={unit}
-                  onClick={() => setSelectedUnit(unit)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
-                    selectedUnit === unit
-                      ? 'bg-white text-blue-700 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  {unit === 'FINAL' ? 'FINAL' : unit.replace('UNIDADE_', 'U')}
-                </button>
-              ))}
+      {/* Header Premium */}
+      <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200 sticky top-0 z-50">
+        <div className="max-w-[1600px] mx-auto px-6 py-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="flex items-center space-x-5">
+              <Link
+                href="/dashboard/resultados"
+                className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-all shadow-sm hover:translate-x-[-2px]"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div>
+                <div className="flex items-center space-x-2 mb-0.5">
+                  <h1 className="text-2xl font-black text-black tracking-tight uppercase">RESULTADO - {turmaNome}</h1>
+                  <span className="px-2 py-0.5 bg-blue-600 text-white text-[9px] font-bold rounded-md uppercase tracking-widest leading-none">
+                    Realtime
+                  </span>
+                </div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-widest flex items-center">
+                  <span className="text-blue-600 mr-2 font-bold">{turmaNome}</span>
+                  • Relatório de Notas • {selectedUnit.replace('UNIDADE_', 'Unidade ').replace('FINAL', 'Final')}
+                </p>
+              </div>
             </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="bg-slate-100/50 p-1 rounded-2xl flex items-center border border-slate-200/50 shadow-inner">
+                {[
+                  { id: 'FINAL', label: 'Status', icon: CheckCircle2 },
+                  { id: 'UNIDADE_1', label: 'Und 1', icon: FileText },
+                  { id: 'UNIDADE_2', label: 'Und 2', icon: FileText },
+                  { id: 'UNIDADE_3', label: 'Und 3', icon: FileText }
+                ].map((item) => {
+                  const Icon = item.icon
+                  const active = selectedUnit === item.id
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setSelectedUnit(item.id as UnitOption)}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-[0.8rem] text-xs font-bold transition-all ${
+                        active 
+                        ? 'bg-black text-white shadow-lg active:scale-95' 
+                        : 'text-slate-500 hover:text-black hover:bg-white/50'
+                      }`}
+                    >
+                      <Icon className={`w-3.5 h-3.5 ${active ? 'text-white' : 'text-slate-400'}`} />
+                      <span className="uppercase tracking-wide">{item.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
 
-            <button
-              onClick={() => window.print()}
-              className="flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors shadow-sm"
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              <span className="text-sm font-medium">Imprimir</span>
-            </button>
+              <a
+                href={`/api/relatorio/resultados/${turmaId}/pdf?unit=${selectedUnit}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center space-x-2 bg-blue-600 text-white px-5 py-2.5 rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95 font-bold text-xs uppercase tracking-widest"
+              >
+                <Download className="w-4 h-4" />
+                <span>PDF</span>
+              </a>
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* Tabela */}
-      <div className="flex-1 overflow-auto print:overflow-visible print:mt-0 table-container">
-        <div className="inline-block min-w-full align-middle">
-          <table className="min-w-full border-collapse border border-gray-200 print:border-black">
-            <thead>
-              <tr className="bg-gray-50 print:bg-white text-black">
-                {/* Coluna de Numeração */}
-                <th className="sticky left-0 top-0 z-20 bg-gray-50 print:bg-white border border-gray-200 print:border-black p-1 w-8 text-center align-bottom no-print-sticky">
-                  <span className="text-[10px] font-bold">Nº</span>
-                </th>
+      {/* Main Content */}
+      <main className="max-w-[1600px] mx-auto px-4 py-6">
+        {/* Compact Summary & Legend Row */}
+        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          {/* Metrics */}
+          <div className="flex items-center space-x-6 px-2">
+            <div>
+               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estudantes</p>
+               <p className="text-2xl font-bold text-black leading-none">{matrixData.length}</p>
+            </div>
+            <div className="w-px h-8 bg-slate-100" />
+            <div>
+               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Disciplinas</p>
+               <p className="text-2xl font-bold text-black leading-none">{disciplinas.length}</p>
+            </div>
+          </div>
 
-                {/* Nome do Aluno */}
-                <th className="sticky left-0 top-0 z-20 bg-gray-50 print:bg-white border border-gray-200 print:border-black p-3 text-left min-w-[200px] max-w-[250px] align-bottom outline outline-1 outline-gray-200 print:outline-none no-print-sticky">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider print:text-black">Nome do Aluno</span>
-                </th>
+          {/* Compact Legend */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+             {[
+               { id: 'AP', label: 'Aprovado', color: 'bg-emerald-500' },
+               { id: 'RC', label: 'Recup', color: 'bg-amber-500' },
+               { id: 'AR', label: 'Apr.Rec', color: 'bg-emerald-600' },
+               { id: 'AC', label: 'Conselho', color: 'bg-blue-600' },
+               { id: 'DP', label: 'Dep', color: 'bg-rose-600' },
+               { id: 'DS', label: 'Desist', color: 'bg-slate-800' },
+               { id: 'DS_U', badge: 'DS', label: 'Unid. Des', color: 'bg-white border border-slate-200', text: 'text-black' }
+             ].map((item) => (
+               <div key={item.id} className="flex items-center space-x-1.5" title={item.label}>
+                 <span className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold ${item.color} ${item.text || 'text-white'}`}>
+                   {item.badge || item.id}
+                 </span>
+                 <span className="text-[10px] font-medium text-slate-500 uppercase">{item.label}</span>
+               </div>
+             ))}
+          </div>
+        </div>
 
-                {/* Disciplinas */}
-                {disciplinas.map(d => (
-                  <th key={d.id} className="sticky top-0 z-10 bg-gray-50 print:bg-white border border-gray-200 print:border-black w-10 min-w-[40px] align-bottom p-1 outline outline-1 outline-gray-200 print:outline-none no-print-sticky">
-                     <div className="h-64 flex items-end justify-center pb-2 print:h-48">
-                       <span 
-                         className="text-[10px] font-bold text-gray-700 uppercase whitespace-nowrap print:text-black line-clamp-1"
-                         style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-                         title={d.nome}
-                       >
-                         {d.nome}
-                       </span>
-                    </div>
+        {/* Ultra Compact Matriz */}
+        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden relative">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-200">
+                  <th className="px-2 py-2 text-center text-[9px] font-bold text-slate-400 uppercase sticky left-0 bg-slate-50/95 backdrop-blur z-20 w-10 border-r border-slate-200">
+                    #
                   </th>
-                ))}
-
-                {/* Situação */}
-                <th className="sticky top-0 z-10 bg-gray-50 print:bg-white border border-gray-200 print:border-black p-2 w-24 min-w-[90px] align-bottom outline outline-1 outline-gray-200 print:outline-none no-print-sticky">
-                  <div className="w-full h-full flex items-end justify-center pb-2">
-                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider print:text-black">SITUAÇÃO</span>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white">
-              {matrixData.map((aluno, idx) => {
-                 // Cálculo da Situação Dinâmica
-                 let situacao = 'AP'
-                 const notasDoAluno = disciplinas.map(d => aluno.notas[d.id])
-                 
-                 for (const n of notasDoAluno) {
-                    const data = calculateCellData(n, selectedUnit)
-                    // Se for um número e menor que 5, fica em REC
-                    if (typeof data.value === 'string' && data.value !== '-') {
-                        const numericValue = parseFloat(data.value.replace(',', '.'))
-                        if (numericValue < 5) {
-                            situacao = 'REC'
-                            break
-                        }
-                    } else if (typeof data.value === 'number' && data.value < 5) {
-                        situacao = 'REC'
-                        break
-                    }
-                 }
-
-                 return (
-                  <tr key={aluno.id} className="hover:bg-gray-50 transition-colors print:hover:bg-transparent">
-                    {/* Número */}
-                    <td className="border border-gray-200 print:border-black p-2 text-center text-[10px] font-bold no-print-sticky bg-white print:bg-white">
-                      {idx + 1}
-                    </td>
-
-                    {/* Nome */}
-                    <td className={`
-                      sticky left-0 z-10 bg-white print:bg-white border border-gray-200 print:border-black px-3 py-2 
-                      text-xs font-medium text-gray-900 whitespace-nowrap outline outline-1 outline-gray-200 print:outline-none no-print-sticky 
-                      ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30 print:bg-white'}
-                    `}>
-                      {aluno.nome.toUpperCase()}
-                    </td>
-
-                    {/* Notas */}
-                    {disciplinas.map(d => {
-                      const nota = aluno.notas[d.id]
-                      const { value, color, textClass } = calculateCellData(nota, selectedUnit)
-                      
-                      return (
-                        <td 
-                          key={d.id} 
-                          className={`border border-gray-200 print:border-black p-1 text-center text-[11px] h-8 ${color}`}
-                        >
-                          <span className={`${textClass} font-medium block`}>{value}</span>
-                        </td>
-                      )
-                    })}
-
-                    {/* Situação */}
-                    <td className={`border border-gray-200 print:border-black px-2 py-1 text-center text-[10px] font-bold print:text-black ${situacao === 'AP' ? 'text-blue-700' : 'text-red-700'}`}>
-                      {situacao}
+                  <th className="px-3 py-2 text-left text-[9px] font-black text-black uppercase sticky left-8 bg-white z-30 min-w-[250px] border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.05)] whitespace-nowrap">
+                    Estudante
+                  </th>
+                  {disciplinas.map((disc) => (
+                    <th key={disc.id} className="w-11 min-w-[2.75rem] max-w-[2.75rem] px-0 py-2 align-bottom h-24 border-r border-slate-100 last:border-0">
+                      <div className="flex items-center justify-center h-full w-full">
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest [writing-mode:vertical-rl] rotate-180 whitespace-nowrap overflow-hidden text-ellipsis max-h-[85px]">
+                          {abreviarNome(disc.nome)}
+                        </span>
+                      </div>
+                    </th>
+                  ))}
+                  <th className="w-24 px-2 py-2 text-center text-[9px] font-bold text-blue-600 uppercase sticky right-0 bg-slate-50/95 backdrop-blur z-20 border-l border-slate-200">
+                    Predição IA
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {matrixData.length === 0 ? (
+                  <tr>
+                    <td colSpan={disciplinas.length + 3} className="py-12 text-center text-slate-400 font-medium uppercase tracking-widest text-xs">
+                       Nenhum estudante nesta turma.
                     </td>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                ) : (
+                  matrixData.map((estudante, idx) => {
+                    const notasDoAluno = disciplinas.map(d => estudante.notas[d.id])
+                    
+                    // Cálculo de Risco IA
+                    let worstRisk: any = { level: 'NONE' };
+                    for (const n of notasDoAluno) {
+                        if (n) {
+                            const analysis = analyzeRisk(n.nota1 ?? null, n.nota2 ?? null, n.nota3 ?? null);
+                            if (worstRisk.level === 'NONE' || 
+                               (analysis.level === 'CRITICAL') || 
+                               (analysis.level === 'HIGH' && worstRisk.level !== 'CRITICAL') ||
+                               (analysis.level === 'MEDIUM' && (worstRisk.level !== 'CRITICAL' && worstRisk.level !== 'HIGH'))) {
+                              worstRisk = analysis;
+                            }
+                        }
+                    }
+
+                    const isEven = idx % 2 === 0
+                    const isSelected = selectedStudentId === estudante.id
+                    
+                    let rowBg = isEven ? 'bg-white' : 'bg-slate-50/50'
+                    if (isSelected) rowBg = '!bg-yellow-50'
+                    
+                    return (
+                      <tr 
+                        key={estudante.id} 
+                        onClick={() => setSelectedStudentId(isSelected ? null : estudante.id)}
+                        className={`group hover:bg-blue-50/30 transition-colors cursor-pointer ${rowBg}`}
+                      >
+                        <td className={`h-9 px-1 text-center text-[10px] font-medium text-slate-400 sticky left-0 group-hover:bg-blue-50/30 transition-colors z-10 border-r border-slate-100 ${rowBg}`}>
+                          {(idx + 1).toString().padStart(2, '0')}
+                        </td>
+                        <td className={`h-9 px-3 text-xs font-bold text-black sticky left-8 z-20 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.05)] whitespace-nowrap min-w-[250px] bg-white`}>
+                           {estudante.nome.toUpperCase()}
+                        </td>
+                        {disciplinas.map((disc) => (
+                          <td key={disc.id} className="w-11 min-w-[2.75rem] max-w-[2.75rem] h-9 px-0 text-center border-r border-slate-50 last:border-0">
+                            <div className="flex items-center justify-center w-full h-full">
+                              {renderCellContent(estudante.notas[disc.id])}
+                            </div>
+                          </td>
+                        ))}
+                        <td className={`h-9 px-2 text-center sticky right-0 bg-white border-l border-slate-100 group-hover:bg-blue-50/30 transition-colors z-10 ${rowBg}`}>
+                           <div className={`
+                             inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all
+                             ${worstRisk.level === 'CRITICAL' ? 'bg-rose-50 border-rose-100' : 
+                               worstRisk.level === 'HIGH' ? 'bg-orange-50 border-orange-100' :
+                               worstRisk.level === 'MEDIUM' ? 'bg-amber-50 border-amber-100' :
+                               'bg-slate-50 border-slate-100'}
+                           `} title={worstRisk.message}>
+                             {worstRisk.level === 'CRITICAL' && <AlertTriangle size={10} className="text-rose-600 animate-pulse" />}
+                             {worstRisk.level === 'HIGH' && <TrendingDown size={10} className="text-orange-600" />}
+                             {worstRisk.level === 'MEDIUM' && <Info size={10} className="text-amber-600" />}
+                             
+                             <span className={`text-[8px] font-black uppercase tracking-tight ${worstRisk.color || 'text-slate-400'}`}>
+                               {worstRisk.level === 'NONE' ? '-' : 
+                                worstRisk.level === 'CRITICAL' ? 'Crítico' :
+                                worstRisk.level === 'HIGH' ? 'Alto' :
+                                worstRisk.level === 'MEDIUM' ? 'Médio' : 'Baixo'}
+                             </span>
+                           </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-      
-      {/* Footer Print */}
-      <div className="hidden print:block mt-4 text-[10px] text-center text-gray-500">
-        <p>Documento gerado em {new Date().toLocaleDateString()} pelo sistema EduClass.</p>
-      </div>
+      </main>
     </div>
   )
 }

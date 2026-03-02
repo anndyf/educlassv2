@@ -28,7 +28,7 @@ interface RelatorioStatusClientProps {
     turno?: string | null
     disciplinas: { id: string; nome: string }[]
     estudantes: {
-      id: string
+      matricula: string
       nome: string
       notas: NotaData[]
     }[]
@@ -65,6 +65,33 @@ export default function RelatorioStatusClient({ turma }: RelatorioStatusClientPr
     if (nota === null || nota === undefined) return 'text-slate-300 font-normal'
     if (nota >= 5) return 'text-emerald-600 font-medium'
     return 'text-rose-600 font-medium'
+  }
+
+  const abreviarNome = (nome: string) => {
+    const nomeUpper = nome.toUpperCase()
+    
+    // Abreviações específicas solicitadas ou comuns
+    const mapa: Record<string, string> = {
+      'ALGORITMOS E LINGUAGEM DE PROGRAMAÇÃO': 'Algoritmos e Linguagem P.',
+      'FUNDAMENTOS DA COMPUTAÇÃO': 'Fund. da Computação',
+      'INICIAÇÃO CIENTÍFICA': 'Inic. Científica',
+      'LÍNGUA PORTUGUESA': 'Português',
+      'EDUCAÇÃO FÍSICA': 'Ed. Física',
+      'BANCO DE DADOS': 'Banco de Dados',
+      'EDUCAÇÃO DIGITAL E MIDIÁTICA': 'Ed. Digital e Midiática',
+      'HISTÓRIA DA BAHIA': 'Hist. da Bahia',
+      'FUNDAMENTOS DE ARQUITETURA DE COMPUTADORES': 'Arq. de Computadores',
+      'PROJETO TECNOLOGIAS SOCIAIS': 'Tec. Sociais'
+    }
+
+    if (mapa[nomeUpper]) return mapa[nomeUpper]
+    
+    // Se for muito longo, truncar ou abreviar genericamente
+    if (nome.length > 25) {
+      return nome.substring(0, 22) + '...'
+    }
+
+    return nome
   }
 
   const renderCellContent = (nota: NotaData | undefined) => {
@@ -122,7 +149,7 @@ export default function RelatorioStatusClient({ turma }: RelatorioStatusClientPr
               </Link>
               <div>
                 <div className="flex items-center space-x-2 mb-0.5">
-                  <h1 className="text-2xl font-bold text-black tracking-tight">Status Geral</h1>
+                  <h1 className="text-2xl font-black text-black tracking-tight uppercase">RESULTADO - {turma.nome}</h1>
                   <span className="px-2 py-0.5 bg-blue-600 text-white text-[9px] font-bold rounded-md uppercase tracking-widest leading-none">
                     Realtime
                   </span>
@@ -227,10 +254,10 @@ export default function RelatorioStatusClient({ turma }: RelatorioStatusClientPr
                     Estudante
                   </th>
                   {turma.disciplinas.map((disc) => (
-                    <th key={disc.id} className="w-9 min-w-[2.25rem] max-w-[2.25rem] px-0 py-2 align-bottom h-32 border-r border-slate-100 last:border-0">
+                    <th key={disc.id} className="w-9 min-w-[2.25rem] max-w-[2.25rem] px-0 py-2 align-bottom h-24 border-r border-slate-100 last:border-0">
                       <div className="flex items-center justify-center h-full w-full">
-                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest [writing-mode:vertical-rl] rotate-180 whitespace-nowrap overflow-hidden text-ellipsis max-h-[110px]">
-                          {disc.nome}
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest [writing-mode:vertical-rl] rotate-180 whitespace-nowrap overflow-hidden text-ellipsis max-h-[85px]">
+                          {abreviarNome(disc.nome)}
                         </span>
                       </div>
                     </th>
@@ -248,15 +275,15 @@ export default function RelatorioStatusClient({ turma }: RelatorioStatusClientPr
                   turma.estudantes.map((estudante, idx) => {
                     const notasMap = new Map(estudante.notas.map(n => [n.disciplinaId, n]))
                     const isEven = idx % 2 === 0
-                    const isSelected = selectedStudentId === estudante.id
+                    const isSelected = selectedStudentId === estudante.matricula
                     
                     let rowBg = isEven ? 'bg-white' : 'bg-slate-50/50'
                     if (isSelected) rowBg = '!bg-yellow-50'
                     
                     return (
                       <tr 
-                        key={estudante.id} 
-                        onClick={() => setSelectedStudentId(isSelected ? null : estudante.id)}
+                        key={estudante.matricula} 
+                        onClick={() => setSelectedStudentId(isSelected ? null : estudante.matricula)}
                         className={`group hover:bg-blue-50/30 transition-colors cursor-pointer ${rowBg}`}
                       >
                         <td className={`h-9 px-1 text-center text-[10px] font-medium text-slate-400 sticky left-0 group-hover:bg-blue-50/30 transition-colors z-10 border-r border-slate-100 ${rowBg}`}>

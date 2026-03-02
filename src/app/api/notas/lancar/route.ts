@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { v4 as uuidv4 } from 'uuid'
+import { logAudit } from '@/lib/audit'
 
 export const runtime = 'nodejs'
 
@@ -65,8 +66,17 @@ export async function POST(request: NextRequest) {
 
         const statusEnum = status as any
         
+        const [student, discipline] = await Promise.all([
+          prisma.estudante.findUnique({ where: { matricula: estudanteId }, select: { nome: true } }),
+          prisma.disciplina.findUnique({ where: { id: disciplinaId }, select: { nome: true } })
+        ])
+
+        const targetName = student?.nome || 'Estudante desconhecido'
+        const disciplineName = discipline?.nome || 'Disciplina desconhecida'
+
         const existing = await prisma.$queryRaw<any[]>`
-          SELECT id FROM "notas_finais" 
+          SELECT id, nota_1 as "nota1", nota_2 as "nota2", nota_3 as "nota3", status 
+          FROM "notas_finais" 
           WHERE "estudante_id" = ${estudanteId} AND "disciplina_id" = ${disciplinaId}
           LIMIT 1
         `
@@ -89,6 +99,20 @@ export async function POST(request: NextRequest) {
               "modified_at" = NOW()
             WHERE "id" = ${notaId}
           `
+          
+          await logAudit(
+            session.user.id,
+            'NOTA',
+            notaId,
+            'UPDATE',
+            { 
+              alvo: targetName, 
+              disciplina: disciplineName,
+              anterior: { n1: existing[0].nota1, n2: existing[0].nota2, n3: existing[0].nota3, st: existing[0].status },
+              atual: { n1: n1, n2: n2, n3: n3, st: statusEnum }
+            }
+          )
+          
           return { id: notaId, updated: true }
         } else {
           const newId = uuidv4()
@@ -104,6 +128,22 @@ export async function POST(request: NextRequest) {
               ${session.user.id}, NOW(), NOW(), NOW()
             )
           `
+          
+          await logAudit(
+            session.user.id,
+            'NOTA',
+            newId,
+            'INSERT',
+            { 
+              alvo: targetName, 
+              disciplina: disciplineName,
+              nota1: n1, 
+              nota2: n2, 
+              nota3: n3, 
+              status: statusEnum 
+            }
+          )
+          
           return { id: newId, created: true }
         }
       })

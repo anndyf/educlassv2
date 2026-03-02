@@ -7,7 +7,7 @@ export const runtime = 'nodejs'
 
 async function getEstudante(id: string) {
   return await prisma.estudante.findUnique({
-    where: { id }
+    where: { matricula: id }
   })
 }
 

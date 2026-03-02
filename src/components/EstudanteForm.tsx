@@ -12,9 +12,9 @@ interface Turma {
 
 interface EstudanteFormProps {
   estudante?: {
-    id: string
     nome: string
     turmaId: string
+    matricula: string
   }
   isEdit?: boolean
 }
@@ -26,7 +26,8 @@ export default function EstudanteForm({ estudante, isEdit = false }: EstudanteFo
   const [turmas, setTurmas] = useState<Turma[]>([])
   const [formData, setFormData] = useState({
     nome: estudante?.nome || "",
-    turmaId: estudante?.turmaId || ""
+    turmaId: estudante?.turmaId || "",
+    matricula: estudante?.matricula || ""
   })
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export default function EstudanteForm({ estudante, isEdit = false }: EstudanteFo
     setError("")
 
     try {
-      const url = isEdit ? `/api/estudantes/${estudante?.id}` : '/api/estudantes'
+      const url = isEdit ? `/api/estudantes/${estudante?.matricula}` : '/api/estudantes'
       const method = isEdit ? 'PUT' : 'POST'
 
       const response = await fetch(url, {
@@ -73,7 +74,7 @@ export default function EstudanteForm({ estudante, isEdit = false }: EstudanteFo
 
     setLoading(true)
     try {
-      const response = await fetch(`/api/estudantes/${estudante?.id}`, {
+      const response = await fetch(`/api/estudantes/${estudante?.matricula}`, {
         method: 'DELETE'
       })
 
@@ -138,6 +139,24 @@ export default function EstudanteForm({ estudante, isEdit = false }: EstudanteFo
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 placeholder="Ex: João Silva Santos"
               />
+            </div>
+
+            <div>
+              <label htmlFor="matricula" className="block text-sm font-medium text-gray-700 mb-2">
+                Número de Matrícula *
+              </label>
+              <input
+                type="text"
+                id="matricula"
+                required
+                value={formData.matricula}
+                onChange={(e) => setFormData({ ...formData, matricula: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Ex: 2024001234"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                A matrícula é o identificador único do aluno e será usada para o acesso ao portal.
+              </p>
             </div>
 
             <div>

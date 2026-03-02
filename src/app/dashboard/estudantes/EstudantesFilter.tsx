@@ -108,7 +108,7 @@ export default function EstudantesFilter({ cursos, turmas, totalResults }: Filte
   }
 
   return (
-    <div className="p-6 border-b border-gray-200">
+    <div className="p-6 border-b border-slate-200">
       {/* Top Row: Stats + Search */}
       <div className="flex flex-col md:flex-row gap-4 mb-4">
         {/* Total Card */}
@@ -125,12 +125,12 @@ export default function EstudantesFilter({ cursos, turmas, totalResults }: Filte
         {/* Search Input */}
         <div className="flex-1 relative">
            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-             <Search className="h-6 w-6 text-gray-400" />
+             <Search className="h-6 w-6 text-slate-400" />
            </div>
            <input
              type="text"
              placeholder="Buscar estudante por nome..."
-             className="block w-full pl-12 pr-4 py-4 h-full border border-gray-200 rounded-lg leading-5 bg-gray-50 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 sm:text-lg transition-all"
+             className="block w-full pl-12 pr-4 py-4 h-full border border-slate-200 rounded-lg leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 sm:text-lg transition-all"
              value={search}
              onChange={(e) => setSearch(e.target.value)}
            />
@@ -142,7 +142,7 @@ export default function EstudantesFilter({ cursos, turmas, totalResults }: Filte
         {/* Curso Filter */}
         <div>
           <select
-            className="block w-full pl-3 pr-10 py-2.5 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg"
+            className="block w-full pl-3 pr-10 py-2.5 text-sm border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg"
             value={cursoId}
             onChange={(e) => handleCursoChange(e.target.value)}
           >
@@ -158,7 +158,7 @@ export default function EstudantesFilter({ cursos, turmas, totalResults }: Filte
         {/* Turno Filter */}
         <div>
           <select
-            className="block w-full pl-3 pr-10 py-2.5 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg"
+            className="block w-full pl-3 pr-10 py-2.5 text-sm border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg"
             value={turno}
             onChange={(e) => handleTurnoChange(e.target.value)}
           >
@@ -172,7 +172,7 @@ export default function EstudantesFilter({ cursos, turmas, totalResults }: Filte
         {/* Serie Filter */}
         <div>
           <select
-            className="block w-full pl-3 pr-10 py-2.5 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg"
+            className="block w-full pl-3 pr-10 py-2.5 text-sm border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg"
             value={serie}
             onChange={(e) => handleSerieChange(e.target.value)}
           >
@@ -187,7 +187,7 @@ export default function EstudantesFilter({ cursos, turmas, totalResults }: Filte
         {/* Turma Filter */}
         <div>
           <select
-            className="block w-full pl-3 pr-10 py-2.5 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg disabled:bg-gray-50 disabled:text-gray-400"
+            className="block w-full pl-3 pr-10 py-2.5 text-sm border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg disabled:bg-slate-50 disabled:text-slate-400"
             value={turmaId}
             onChange={(e) => handleTurmaChange(e.target.value)}
             disabled={!cursoId && !turno && !serie && turmas.length > 50} 
@@ -204,7 +204,7 @@ export default function EstudantesFilter({ cursos, turmas, totalResults }: Filte
         {/* Clear Button */}
         <button 
            onClick={handleClearFilters}
-           className="flex items-center justify-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium border border-gray-200"
+           className="flex items-center justify-center space-x-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium border border-slate-200"
            title="Limpar todos os filtros"
         >
            <FilterX className="w-4 h-4" />

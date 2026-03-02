@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -20,57 +21,188 @@ model User {
   updatedAt             DateTime         @updatedAt @map("updated_at")
   lastLogin             DateTime?        @map("last_login")
   isDirecao             Boolean          @default(false) @map("is_direcao")
+  isPortalUser          Boolean          @default(false) @map("is_portal_user")
+  estudanteId           String?          @map("estudante_id")
+  auditLogs             AuditLog[]
+  deletedMessages       MessageDelete[]
+  readMessages          MessageRead[]
+  receivedMessages      Message[]        @relation("ReceivedMessages")
+  sentMessages          Message[]        @relation("SentMessages")
   notasModificadas      NotaFinal[]      @relation("NotaModificador")
   auditorias            NotaFinalAudit[]
+  provasCriadas         Prova[]          @relation("ProfessorProvas")
+  provasSalvas          Prova[]          @relation("ProvasSalvas")
+  questoesComFeedback   Questao[]        @relation("AdminFeedback")
+  questoes              Questao[]        @relation("ProfessorQuestoes")
+  estudante             Estudante?       @relation("UserEstudante", fields: [estudanteId], references: [matricula])
   disciplinasPermitidas Disciplina[]     @relation("DisciplinaUsuarios")
   turmasPermitidas      Turma[]          @relation("TurmaUsuarios")
 
   @@map("users")
 }
 
+model GlobalConfig {
+  id                   String   @id @default("global")
+  isBancoQuestoesAtivo Boolean  @default(true) @map("is_banco_questoes_ativo")
+  anoLetivoAtual       Int      @default(2026) @map("ano_letivo_atual")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("configs")
+}
+
+model Message {
+  id           String          @id @default(cuid())
+  subject      String
+  content      String
+  category     MessageCategory @default(GERAL)
+  senderId     String          @map("sender_id")
+  receiverId   String?         @map("receiver_id")
+  isRead       Boolean         @default(false) @map("is_read")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  parentId     String?         @map("parent_id")
+  allowReplies Boolean         @default(true) @map("allow_replies")
+  deletedBy    MessageDelete[]
+  readBy       MessageRead[]
+  parent       Message?        @relation("MessageReplies", fields: [parentId], references: [id])
+  replies      Message[]       @relation("MessageReplies")
+  receiver     User?           @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  sender       User            @relation("SentMessages", fields: [senderId], references: [id])
+
+  @@index([receiverId, createdAt])
+  @@index([senderId, createdAt])
+  @@index([parentId, createdAt])
+  @@index([category, createdAt])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+model MessageRead {
+  id        String   @id @default(cuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  readAt    DateTime @default(now()) @map("read_at")
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
+  @@map("message_reads")
+}
+
+model MessageDelete {
+  id        String   @id @default(cuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  deletedAt DateTime @default(now()) @map("deleted_at")
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
+  @@map("message_deletes")
+}
+
+model Questao {
+  id              String        @id @default(cuid())
+  enunciado       String
+  imagemUrl       String?       @map("imagem_url")
+  muleta          String?
+  alternativaA    String
+  alternativaB    String
+  alternativaC    String
+  alternativaD    String
+  alternativaE    String
+  correta         String
+  dificuldade     Dificuldade   @default(MEDIO)
+  status          QuestaoStatus @default(PENDENTE)
+  feedbackAdmin   String?       @map("feedback_admin")
+  professorId     String        @map("professor_id")
+  adminFeedbackId String?       @map("admin_feedback_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  adminFeedback   User?         @relation("AdminFeedback", fields: [adminFeedbackId], references: [id])
+  professor       User          @relation("ProfessorQuestoes", fields: [professorId], references: [id])
+  provas          Prova[]       @relation("ProvaQuestoes")
+  disciplinas     Disciplina[]  @relation("QuestaoDisciplinas")
+  turmas          Turma[]       @relation("QuestaoTurmas")
+
+  @@map("questoes")
+}
+
+model Prova {
+  id                 String    @id @default(cuid())
+  titulo             String
+  turmaId            String?   @map("turma_id")
+  professorCriadorId String?   @map("professor_criador_id")
+  savedByUserId      String?   @map("saved_by_user_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  professorCriador   User?     @relation("ProfessorProvas", fields: [professorCriadorId], references: [id])
+  savedByUser        User?     @relation("ProvasSalvas", fields: [savedByUserId], references: [id])
+  turma              Turma?    @relation(fields: [turmaId], references: [id])
+  questoes           Questao[] @relation("ProvaQuestoes")
+
+  @@map("provas")
+}
+
 model Turma {
   id                 String       @id @default(cuid())
   nome               String
   cursoId            String?      @map("curso_id")
-  curso              String?      // Campo legado
+  curso              String?
   turno              String?
   modalidade         String?
-  serie              String?      
+  serie              String?
   numero             Int?
   anoLetivo          Int?         @map("ano_letivo")
   createdAt          DateTime     @default(now()) @map("created_at")
   updatedAt          DateTime     @updatedAt @map("updated_at")
-
-  cursoRel           Curso?       @relation(fields: [cursoId], references: [id])
   disciplinas        Disciplina[]
   estudantes         Estudante[]
+  provas             Prova[]
+  cursoRel           Curso?       @relation(fields: [cursoId], references: [id])
+  questoes           Questao[]    @relation("QuestaoTurmas")
   usuariosPermitidos User[]       @relation("TurmaUsuarios")
 
+  horarios           HorarioAula[]
   @@map("turmas")
 }
 
-model Curso {
-  id          String   @id @default(cuid())
-  nome        String   @unique
-  sigla       String   @unique
-  modalidade  String   // EPTNM, PROSUB, PROEJA
-  turnos      String[] // Ex: ["Matutino", "Vespertino"]
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+model HorarioAula {
+  id        String   @id @default(cuid())
+  turmaId   String   @map("turma_id")
+  diaSemana Int      @map("dia_semana") // 1=Seg, 2=Ter, ..., 5=Sex
+  horario   Int      // 1=01º, 2=02º, ...
+  disciplina String
+  professor  String?
+  turma      Turma    @relation(fields: [turmaId], references: [id], onDelete: Cascade)
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  turmas      Turma[]
+  @@unique([turmaId, diaSemana, horario])
+  @@map("horarios_aula")
+}
+
+model Curso {
+  id         String   @id @default(cuid())
+  nome       String   @unique
+  sigla      String   @unique
+  modalidade String
+  turnos     String[]
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  turmas     Turma[]
 
   @@map("cursos")
 }
 
 model Estudante {
-  id        String      @id @default(cuid())
-  nome      String
-  turmaId   String      @map("turma_id")
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
-  turma     Turma       @relation(fields: [turmaId], references: [id], onDelete: Cascade)
-  notas     NotaFinal[]
+  matricula    String      @id
+  nome         String
+  turmaId      String      @map("turma_id")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  turma        Turma       @relation(fields: [turmaId], references: [id], onDelete: Cascade)
+  notas        NotaFinal[]
+  portalAccess User[]      @relation("UserEstudante")
 
   @@map("estudantes")
 }
@@ -84,31 +216,32 @@ model Disciplina {
   turma              Turma       @relation(fields: [turmaId], references: [id], onDelete: Cascade)
   notas              NotaFinal[]
   usuariosPermitidos User[]      @relation("DisciplinaUsuarios")
+  questoes           Questao[]   @relation("QuestaoDisciplinas")
 
   @@map("disciplinas")
 }
 
 model NotaFinal {
-  id              String           @id @default(cuid())
-  estudanteId     String           @map("estudante_id")
-  disciplinaId    String           @map("disciplina_id")
-  nota            Float
-  notaRecuperacao Float?           @map("nota_recuperacao")
-  status          StatusNota
-  modifiedById    String?          @map("modified_by_id")
-  modifiedAt      DateTime         @default(now()) @map("modified_at")
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
-  nota1           Float?           @map("nota_1")
-  nota2           Float?           @map("nota_2")
-  nota3           Float?           @map("nota_3")
-  disciplina      Disciplina       @relation(fields: [disciplinaId], references: [id], onDelete: Cascade)
-  estudante       Estudante        @relation(fields: [estudanteId], references: [id], onDelete: Cascade)
+  id                String           @id @default(cuid())
+  estudanteId       String           @map("estudante_id")
+  disciplinaId      String           @map("disciplina_id")
+  nota              Float
+  notaRecuperacao   Float?           @map("nota_recuperacao")
+  status            StatusNota
+  modifiedById      String?          @map("modified_by_id")
+  modifiedAt        DateTime         @default(now()) @map("modified_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  nota1             Float?           @map("nota_1")
+  nota2             Float?           @map("nota_2")
+  nota3             Float?           @map("nota_3")
   isDesistenteUnid1 Boolean          @default(false) @map("is_desistente_unid1")
   isDesistenteUnid2 Boolean          @default(false) @map("is_desistente_unid2")
   isDesistenteUnid3 Boolean          @default(false) @map("is_desistente_unid3")
-  modifiedBy      User?            @relation("NotaModificador", fields: [modifiedById], references: [id])
-  auditorias      NotaFinalAudit[]
+  disciplina        Disciplina       @relation(fields: [disciplinaId], references: [id], onDelete: Cascade)
+  estudante         Estudante        @relation(fields: [estudanteId], references: [matricula], onDelete: Cascade)
+  modifiedBy        User?            @relation("NotaModificador", fields: [modifiedById], references: [id])
+  auditorias        NotaFinalAudit[]
 
   @@unique([estudanteId, disciplinaId])
   @@map("notas_finais")
@@ -126,6 +259,41 @@ model NotaFinalAudit {
   notaFinal    NotaFinal  @relation(fields: [notaFinalId], references: [id], onDelete: Cascade)
 
   @@map("notas_finais_audit")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  action     String
+  details    String?
+  ipAddress  String?  @map("ip_address")
+  userId     String   @map("user_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+enum MessageCategory {
+  COMUNICADO
+  SUPORTE
+  DIRECAO
+  GERAL
+}
+
+enum QuestaoStatus {
+  PENDENTE
+  APROVADA
+  REJEITADA
+}
+
+enum Dificuldade {
+  FACIL
+  MEDIO
+  DIFICIL
 }
 
 enum StatusNota {

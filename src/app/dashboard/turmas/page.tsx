@@ -21,7 +21,7 @@ export default async function TurmasPage() {
   const turmas = await getTurmasPermitidas(session)
 
   // Agrupar turmas por turno para o banner
-  const turmasAgrupadas = turmas.reduce((acc, turma) => {
+  const turmasAgrupadas = turmas.reduce((acc: any, turma: any) => {
     const decoded = decodeTurma(turma.nome)
     const turno = turma.turno || decoded.turno || "Outros"
     if (!acc[turno]) acc[turno] = []
@@ -51,7 +51,7 @@ export default async function TurmasPage() {
             </div>
             <Link
               href="/dashboard/turmas/nova"
-              className={`flex items-center space-x-2 bg-black text-white px-4 py-2.5 rounded-xl hover:bg-black/90 transition-all shadow-lg ${!session.user.isSuperuser ? 'hidden' : ''}`}
+              className={`flex items-center space-x-2 bg-black text-white px-4 py-2.5 rounded-xl hover:bg-black/90 transition-all shadow-lg ${(!session.user.isSuperuser && !session.user.isDirecao) ? 'hidden' : ''}`}
             >
               <Plus className="w-4 h-4" />
               <span className="text-xs font-black uppercase tracking-wide">Nova Turma</span>

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import Link from "next/link"
-import { ArrowLeft, Users, Gavel, GraduationCap, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, Gavel, CheckCircle2, TrendingUp } from "lucide-react"
 import { getTurmasPermitidas } from "@/lib/data-fetching"
 
 export const runtime = 'nodejs'
@@ -36,7 +36,6 @@ async function getTurmasComConselho(session: any) {
     }
   })
 
-  // Mapear turmas e determinar se estão resolvidas ou pendentes
   const turmasProcessadas = turmas.filter(turma => 
     turma.estudantes.some(est => est.notas.length > 0)
   ).map(turma => {
@@ -54,7 +53,6 @@ async function getTurmasComConselho(session: any) {
     }
   })
 
-  // Agrupar por Turno -> Curso
   const grupos: Record<string, Record<string, any[]>> = {}
   
   turmasProcessadas.forEach(t => {
@@ -79,71 +77,63 @@ export default async function ConselhoClassePage() {
   const grupos = await getTurmasComConselho(session)
   const turnos = Object.keys(grupos)
 
+  const totalPendentes = turnos.reduce((acc, t) => acc + Object.values(grupos[t]).reduce((a, c) => a + c.filter((t: any) => !t.isResolvido).length, 0), 0)
+  const totalFinalizados = turnos.reduce((acc, t) => acc + Object.values(grupos[t]).reduce((a, c) => a + c.filter((t: any) => t.isResolvido).length, 0), 0)
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <header className="bg-white shadow-sm border-b border-gray-200">
+    <div className="min-h-screen bg-slate-50 pb-20">
+      <header className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center space-x-4">
             <Link
               href="/dashboard"
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
+              <ArrowLeft className="w-5 h-5 text-slate-600" />
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Conselho de Classe</h1>
-              <p className="text-sm text-gray-500 font-medium">Gestão de deliberações e fechamento letivo</p>
+              <h1 className="text-2xl font-bold text-slate-900">Conselho de Classe</h1>
+              <p className="text-sm text-slate-600">Gestão de deliberações e fechamento letivo</p>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Banner Informativo */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-slate-800 to-slate-900 rounded-[2.5rem] p-8 mb-10 shadow-2xl shadow-slate-200">
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6 text-center md:text-left">
-              <div className="bg-pink-500 rounded-[2rem] p-5 shadow-xl shadow-pink-500/20">
-                <Gavel className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-black text-white tracking-tight mb-2 uppercase">
-                  Painel de Controle
-                </h3>
-                <p className="text-slate-400 text-sm max-w-xl leading-relaxed font-medium">
-                  Central de decisões para alunos em recuperação. Utilize a barra de busca abaixo para localizar turmas rapidamente entre as 60 unidades.
-                </p>
-              </div>
+        {/* Banner - Estilo Recuperação (Cor Azul) */}
+        <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 mb-8 shadow-lg">
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-2">Painel de Conselho</h2>
+              <p className="text-blue-100 max-w-xl text-sm leading-relaxed">
+                Central de decisões para alunos em recuperação final. 
+                Aqui você realiza o fechamento letivo e as deliberações de aprovação pelo conselho.
+              </p>
             </div>
             
-            <div className="flex flex-col items-center md:items-end space-y-3">
-               <div className="flex space-x-4">
-                  <div className="flex flex-col items-center px-6 py-3 bg-white/5 rounded-3xl border border-white/10 backdrop-blur-sm">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Pendências</span>
-                    <span className="text-xl font-black text-pink-500">
-                      {turnos.reduce((acc, t) => acc + Object.values(grupos[t]).reduce((a, c) => a + c.filter((t: any) => !t.isResolvido).length, 0), 0)}
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-center px-6 py-3 bg-white/5 rounded-3xl border border-white/10 backdrop-blur-sm">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Finalizados</span>
-                    <span className="text-xl font-black text-emerald-500">
-                      {turnos.reduce((acc, t) => acc + Object.values(grupos[t]).reduce((a, c) => a + c.filter((t: any) => t.isResolvido).length, 0), 0)}
-                    </span>
-                  </div>
-               </div>
+            <div className="flex items-center gap-3">
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 min-w-[110px] text-center">
+                <p className="text-blue-100 text-[10px] font-medium uppercase tracking-wider mb-0.5">Pendências</p>
+                <p className="text-2xl font-bold text-white tracking-tighter">{totalPendentes}</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 min-w-[110px] text-center">
+                <p className="text-blue-100 text-[10px] font-medium uppercase tracking-wider mb-0.5">Finalizados</p>
+                <p className="text-2xl font-bold text-white tracking-tighter">{totalFinalizados}</p>
+              </div>
             </div>
           </div>
-          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-96 h-96 bg-pink-500/10 rounded-full blur-[100px]" />
-          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px]" />
+          
+          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-80 h-80 bg-white/5 rounded-full blur-3xl opacity-60" />
+          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 bg-black/10 rounded-full blur-3xl opacity-40" />
         </div>
 
         {turnos.length === 0 ? (
-          <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 p-20 text-center">
-              <div className="bg-slate-50 w-24 h-24 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 border border-slate-100">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-20 text-center">
+              <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 border border-slate-100">
                 <CheckCircle2 className="w-10 h-10 text-emerald-300" />
               </div>
-              <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Tudo Limpo!</h2>
-              <p className="text-slate-400 font-bold max-w-xs mx-auto text-sm">
+              <h2 className="text-xl font-bold text-slate-900 mb-2">Tudo em dia!</h2>
+              <p className="text-slate-500 max-w-xs mx-auto text-sm">
                 Não existem turmas aguardando deliberação de conselho no momento.
               </p>
           </div>

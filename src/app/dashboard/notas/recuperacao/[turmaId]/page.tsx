@@ -22,7 +22,7 @@ async function getNotasRecuperacao(turmaId: string, session: Session) {
     orderBy: { nome: 'asc' }
   })
 
-  const disciplinasIds = new Set(disciplinas.map(d => d.id))
+  const disciplinasIds = new Set(disciplinas.map((d: any) => d.id))
 
   // 2. Buscar dados da turma e notas
   const turma = await prisma.turma.findUnique({
@@ -55,13 +55,13 @@ async function getNotasRecuperacao(turmaId: string, session: Session) {
   if (!turma) return null
 
   // 3. Flatten notas, filtrando apenas disciplinas permitidas
-  const notasRecuperacao = turma.estudantes.flatMap(estudante =>
+  const notasRecuperacao = turma.estudantes.flatMap((estudante: any) =>
     estudante.notas
-      .filter(nota => disciplinasIds.has(nota.disciplinaId))
-      .map(nota => ({
+      .filter((nota: any) => disciplinasIds.has(nota.disciplinaId))
+      .map((nota: any) => ({
         id: nota.id,
         nota: nota.nota,
-        estudanteId: estudante.id,
+        estudanteId: estudante.matricula,
         estudanteNome: estudante.nome,
         disciplinaId: nota.disciplinaId,
         disciplinaNome: nota.disciplina.nome,

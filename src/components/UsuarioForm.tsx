@@ -44,8 +44,10 @@ export default function UsuarioForm({ usuario, isEdit = false }: UsuarioFormProp
     }).format(new Date(date))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const [showConfirm, setShowConfirm] = useState(false)
+  
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     setLoading(true)
     setError("")
 
@@ -68,9 +70,11 @@ export default function UsuarioForm({ usuario, isEdit = false }: UsuarioFormProp
       } else {
         const data = await response.json()
         setError(`${data.message || 'Erro ao processar'}${data.detail ? ': ' + data.detail : ''}`)
+        setShowConfirm(false)
       }
     } catch (err) {
       setError('Erro ao conectar com o servidor')
+      setShowConfirm(false)
     } finally {
       setLoading(false)
     }
@@ -263,7 +267,9 @@ export default function UsuarioForm({ usuario, isEdit = false }: UsuarioFormProp
             )}
 
             <button
-              type="submit" disabled={loading}
+              type="button" 
+              onClick={() => setShowConfirm(true)}
+              disabled={loading}
               className="w-full flex items-center justify-center space-x-3 bg-slate-900 text-white py-6 rounded-[2rem] font-black text-lg hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 active:scale-[0.98] disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
@@ -273,6 +279,35 @@ export default function UsuarioForm({ usuario, isEdit = false }: UsuarioFormProp
           </div>
         </form>
       </main>
+
+      {/* Modal de Confirmação */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
+              <Shield className="w-8 h-8" />
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 mb-2">Confirmar Alterações?</h3>
+            <p className="text-slate-500 font-medium mb-8">
+              Você está prestes a {isEdit ? 'atualizar os dados deste usuário' : 'criar um novo acesso no sistema'}. Deseja prosseguir?
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <button 
+                onClick={() => setShowConfirm(false)}
+                className="py-4 rounded-2xl font-bold text-slate-500 hover:bg-slate-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => handleSubmit()}
+                className="py-4 rounded-2xl font-black bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-lg"
+              >
+                Sim, Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

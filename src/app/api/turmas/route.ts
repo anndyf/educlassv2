@@ -46,6 +46,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const config = await prisma.globalConfig.findUnique({ where: { id: 'global' } })
+    const currentYear = config?.anoLetivoAtual || new Date().getFullYear()
+
     try {
       const turma = await prisma.turma.create({
         data: { 
@@ -54,7 +57,8 @@ export async function POST(request: NextRequest) {
           turno: turno?.trim(),
           modalidade: modalidade?.trim(),
           serie: serie?.toString(),
-          numero: numero ? parseInt(numero.toString()) : null
+          numero: numero ? parseInt(numero.toString()) : null,
+          anoLetivo: currentYear
         }
       })
       return NextResponse.json(turma, { status: 201 })
@@ -66,9 +70,9 @@ export async function POST(request: NextRequest) {
       const numVal = numero ? parseInt(numero.toString()) : null
       
       await prisma.$executeRawUnsafe(`
-        INSERT INTO "turmas" (id, nome, curso, turno, modalidade, serie, numero, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `, id, nome.trim(), curso?.trim(), turno?.trim(), modalidade?.trim(), serie?.toString(), numVal, now, now)
+        INSERT INTO "turmas" (id, nome, curso, turno, modalidade, serie, numero, ano_letivo, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, id, nome.trim(), curso?.trim(), turno?.trim(), modalidade?.trim(), serie?.toString(), numVal, currentYear, now, now)
 
       return NextResponse.json({ id, nome, message: 'Turma criada via SQL' }, { status: 201 })
     }

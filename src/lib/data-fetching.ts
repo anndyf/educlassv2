@@ -16,8 +16,18 @@ export async function getDisciplinasPermitidas(session: Session) {
     }
   }
 
+  const config = await prisma.globalConfig.findUnique({ where: { id: 'global' } })
+  const currentYear = config?.anoLetivoAtual || new Date().getFullYear()
+
+  console.log(`[getDisciplinasPermitidas] Config loaded: ${JSON.stringify(config)}, Resolved Year: ${currentYear}`)
+
   if (session.user.isSuperuser || session.user.isDirecao) {
     return await prisma.disciplina.findMany({
+      where: {
+        turma: {
+          anoLetivo: currentYear
+        }
+      },
       orderBy: { nome: 'asc' },
       include
     })
@@ -34,7 +44,7 @@ export async function getDisciplinasPermitidas(session: Session) {
     }
   })
 
-  return user?.disciplinasPermitidas || []
+  return (user?.disciplinasPermitidas || []).filter((d: any) => d.turma.anoLetivo === currentYear)
 }
 
 /**
@@ -43,8 +53,16 @@ export async function getDisciplinasPermitidas(session: Session) {
  * Se for staff, retorna turmas das disciplinas permitidas ou turmasPermitidas explicitamente.
  */
 export async function getTurmasPermitidas(session: Session) {
+  const config = await prisma.globalConfig.findUnique({ where: { id: 'global' } })
+  const currentYear = config?.anoLetivoAtual || new Date().getFullYear()
+
+  console.log(`[getTurmasPermitidas] Config loaded: ${JSON.stringify(config)}, Resolved Year: ${currentYear}`)
+
   if (session.user.isSuperuser || session.user.isDirecao) {
     return await prisma.turma.findMany({
+      where: {
+        anoLetivo: currentYear
+      },
       orderBy: { nome: 'asc' },
       include: {
         _count: {
@@ -83,7 +101,8 @@ export async function getTurmasPermitidas(session: Session) {
   // Buscar turmas completas
   const turmas = await prisma.turma.findMany({
     where: {
-      id: { in: turmaIds }
+      id: { in: turmaIds },
+      anoLetivo: currentYear
     },
     include: {
       _count: {

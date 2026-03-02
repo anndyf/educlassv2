@@ -6,9 +6,9 @@ import { ArrowLeft, Download, FileText } from "lucide-react"
 
 export const runtime = 'nodejs'
 
-async function getEstudanteBoletim(id: string) {
+async function getEstudanteBoletim(matricula: string) {
   return await prisma.estudante.findUnique({
-    where: { id },
+    where: { matricula },
     include: {
       turma: true,
       notas: {
@@ -94,7 +94,7 @@ export default async function BoletimPage({
               </div>
             </div>
             <a
-              href={`/api/boletim/${estudante.id}/pdf`}
+              href={`/api/boletim/${estudante.matricula}/pdf`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg"

@@ -8,6 +8,7 @@ import { ArrowLeft, Upload, FileText, AlertCircle, CheckCircle, FileType } from 
 interface PreviewData {
   nome: string
   turma: string
+  matricula?: string
 }
 
 interface UploadFormProps {
@@ -54,13 +55,15 @@ export default function UploadForm({ turmas }: UploadFormProps) {
         }
     }
 
-    const studentRegex = /\d{8,}\s+([A-ZÀ-Ú\s]+?)\s+(MATRICULADO|TRANSFERIDO|DESISTENTE|CONCLUÍDO)/g
+    // Identifica matricula e nome
+    const studentRegex = /(\d{8,})\s+([A-ZÀ-Ú\s]+?)\s+(MATRICULADO|TRANSFERIDO|DESISTENTE|CONCLUÍDO)/g
     let match
     
     while ((match = studentRegex.exec(text)) !== null) {
-      if (match[1] && match[1].length > 3) {
+      if (match[2] && match[2].length > 3) {
         students.push({
-          nome: match[1].trim(),
+          matricula: match[1],
+          nome: match[2].trim(),
           turma: detectedTurma || "Turma Desconhecida"
         })
       }
@@ -72,6 +75,7 @@ export default function UploadForm({ turmas }: UploadFormProps) {
              const nomePotencial = match[2].trim()
              if (!nomePotencial.includes("ESCOLA") && !nomePotencial.includes("DIRETOR") && !nomePotencial.includes("TURMA")) {
                  students.push({
+                    matricula: match[1],
                     nome: nomePotencial,
                     turma: detectedTurma || "Turma Desconhecida"
                  })
@@ -99,9 +103,13 @@ export default function UploadForm({ turmas }: UploadFormProps) {
         }
         const data: PreviewData[] = []
         for (let i = 1; i < lines.length; i++) {
-            const [nome, turma] = lines[i].split(',').map(s => s.trim())
-            if (nome) {
-                data.push({ nome, turma: turma || manualTurma || "Sem Turma" })
+            const parts = lines[i].split(',').map(s => s.trim())
+            
+            // Suporta [matricula, nome, turma] ou [nome, turma]
+            if (parts.length >= 3) {
+                data.push({ matricula: parts[0], nome: parts[1], turma: parts[2] || manualTurma || "Sem Turma" })
+            } else if (parts.length === 2) {
+                data.push({ nome: parts[0], turma: parts[1] || manualTurma || "Sem Turma" })
             }
         }
         setPreview(data)
@@ -127,15 +135,18 @@ export default function UploadForm({ turmas }: UploadFormProps) {
     }
   }
 
+  const [skippedList, setSkippedList] = useState<string[]>([])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!file || preview.length === 0) return
 
     setLoading(true)
     setMessage(null)
+    setSkippedList([])
 
     try {
-      const csvContent = "Nome,Turma\n" + preview.map(p => `${p.nome},${manualTurma || p.turma}`).join("\n")
+      const csvContent = "Matricula,Nome,Turma\n" + preview.map(p => `${p.matricula || ''},${p.nome},${manualTurma || p.turma}`).join("\n")
       const blob = new Blob([csvContent], { type: 'text/csv' })
       const finalFile = new File([blob], "importacao_processada.csv", { type: 'text/csv' })
 
@@ -150,13 +161,24 @@ export default function UploadForm({ turmas }: UploadFormProps) {
       const result = await response.json()
 
       if (response.ok) {
-        setMessage({ 
-          type: 'success', 
-          text: `${result.created} estudantes cadastrados com sucesso!` 
-        })
-        setFile(null)
-        setPreview([])
-        setTimeout(() => router.push('/dashboard/estudantes'), 2000)
+        if (result.created > 0) {
+            setMessage({ 
+              type: 'success', 
+              text: `${result.created} estudantes cadastrados com sucesso!` 
+            })
+            if (result.skipped && result.skipped.length > 0) {
+                setSkippedList(result.skipped)
+            }
+            setFile(null)
+            setPreview([])
+            setTimeout(() => router.push('/dashboard/estudantes'), 3000)
+        } else {
+            setMessage({ 
+                type: 'info', 
+                text: result.message || 'Nenhum novo estudante foi cadastrado.' 
+            })
+            if (result.skipped) setSkippedList(result.skipped)
+        }
       } else {
         setMessage({ type: 'error', text: result.message || 'Erro ao processar dados' })
       }
@@ -196,7 +218,8 @@ export default function UploadForm({ turmas }: UploadFormProps) {
                   Para importar vários alunos de uma vez, utilize o arquivo PDF <strong>"Relação de Estudantes na Turma"</strong> baixado diretamente do <strong>SIGEDUC</strong>.
                 </p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                   <li>O sistema extrairá os nomes dos estudantes automaticamente.</li>
+                   <li>O sistema extrairá os <strong>nomes</strong> e <strong>números de matrícula</strong> automaticamente.</li>
+                   <li>A matrícula será usada para criar o acesso ao portal do aluno.</li>
                    <li>É necessário selecionar a <strong>Turma de Destino</strong> abaixo para vincular os alunos.</li>
                 </ul>
                 
@@ -222,10 +245,21 @@ export default function UploadForm({ turmas }: UploadFormProps) {
               message.type === 'error' ? 'bg-red-50 border border-red-200 text-red-800' : 
               'bg-blue-50 border border-blue-200 text-blue-800'
             }`}>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 mb-2">
                 {message.type === 'success' ? <CheckCircle className="w-5 h-5"/> : <AlertCircle className="w-5 h-5"/>}
-                <span>{message.text}</span>
+                <span className="font-semibold">{message.text}</span>
               </div>
+              
+              {skippedList.length > 0 && (
+                <div className="mt-3 ml-7">
+                    <p className="text-sm font-bold mb-1">Registros ignorados (Já existem):</p>
+                    <ul className="list-disc list-inside text-xs space-y-1 opacity-80">
+                        {skippedList.map((item: string, i: number) => (
+                            <li key={i}>{item}</li>
+                        ))}
+                    </ul>
+                </div>
+              )}
             </div>
           )}
 
@@ -265,6 +299,7 @@ export default function UploadForm({ turmas }: UploadFormProps) {
                   <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Matrícula</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Turma de Destino</th>
                     </tr>
@@ -273,6 +308,7 @@ export default function UploadForm({ turmas }: UploadFormProps) {
                     {preview.map((item, index) => (
                       <tr key={index} className="hover:bg-gray-50">
                         <td className="px-6 py-3 text-sm text-gray-500">{index + 1}</td>
+                        <td className="px-6 py-3 text-sm text-slate-500 font-mono">{item.matricula || '-'}</td>
                         <td className="px-6 py-3 text-sm text-gray-900 font-medium">{item.nome}</td>
                         <td className="px-6 py-3 text-sm text-gray-600">
                             {manualTurma || <span className="text-red-500 italic">Selecione a turma acima</span>}

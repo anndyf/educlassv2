@@ -9,6 +9,13 @@ export const runtime = 'nodejs'
 
 async function getUsuarios() {
   return await prisma.user.findMany({
+    where: {
+      estudanteId: null,
+      isPortalUser: false,
+      NOT: {
+        id: { startsWith: "GROUP_" }
+      }
+    },
     orderBy: [
       { isApproved: 'asc' },
       { name: 'asc' }

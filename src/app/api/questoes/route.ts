@@ -1,0 +1,115 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { logAudit } from '@/lib/audit'
+
+export const runtime = 'nodejs'
+
+export async function GET(request: NextRequest) {
+  try {
+    const session = await auth()
+    if (!session) return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
+
+    const { searchParams } = new URL(request.url)
+    const turmaId = searchParams.get('turmaId')
+    const serie = searchParams.get('serie')
+    const disciplinaId = searchParams.get('disciplinaId')
+    const disciplinaNome = searchParams.get('disciplinaNome')
+    const status = searchParams.get('status')
+    const search = searchParams.get('search')
+
+    // Filtros base
+    const where: any = {}
+
+    // Se nâo for admin, só vê as próprias
+    if (!session.user.isSuperuser && !session.user.isDirecao) {
+      where.professorId = session.user.id
+    }
+
+    if (turmaId) {
+      where.turmas = { some: { id: turmaId } }
+    } else if (serie) {
+      where.turmas = { some: { serie: serie } }
+    }
+
+    if (disciplinaId) {
+      where.disciplinas = { some: { id: disciplinaId } }
+    } else if (disciplinaNome) {
+      where.disciplinas = { some: { nome: { contains: disciplinaNome, mode: 'insensitive' } } }
+    }
+    if (status) where.status = status
+    if (search) {
+      where.enunciado = {
+        contains: search,
+        mode: 'insensitive'
+      }
+    }
+
+    const questoes = await prisma.questao.findMany({
+      where,
+      include: {
+        professor: { select: { name: true } },
+        disciplinas: { select: { id: true, nome: true } },
+        turmas: { select: { id: true, nome: true } },
+        adminFeedback: { select: { name: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    return NextResponse.json(questoes)
+  } catch (error) {
+    console.error('Erro ao buscar questões:', error)
+    return NextResponse.json({ message: 'Erro interno' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth()
+    if (!session) return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
+
+    // Verificar se a funcionalidade está ativa para professores
+    if (!session.user.isSuperuser && !session.user.isDirecao) {
+      const config = await prisma.globalConfig.findUnique({ where: { id: 'global' } })
+      if (config && !config.isBancoQuestoesAtivo) {
+        return NextResponse.json({ message: 'Funcionalidade temporariamente desativada' }, { status: 403 })
+      }
+    }
+
+    const body = await request.json()
+    const { 
+      enunciado, 
+      alternativaA, alternativaB, alternativaC, alternativaD, alternativaE, 
+      correta, dificuldade, muleta, imagemUrl,
+      disciplinasIds, turmasIds 
+    } = body
+
+    const questao = await prisma.questao.create({
+      data: {
+        enunciado,
+        alternativaA, alternativaB, alternativaC, alternativaD, alternativaE,
+        correta,
+        dificuldade,
+        muleta,
+        imagemUrl,
+        professorId: session.user.id,
+        status: 'PENDENTE',
+        disciplinas: { connect: disciplinasIds.map((id: string) => ({ id })) },
+        turmas: { connect: turmasIds.map((id: string) => ({ id })) }
+      }
+    })
+
+    await logAudit(
+      session.user.id,
+      'QUESTAO',
+      questao.id,
+      'INSERT',
+      { enunciado: enunciado.substring(0, 50) + '...' }
+    )
+
+    return NextResponse.json(questao, { status: 201 })
+  } catch (error) {
+    console.error('Erro ao criar questão:', error)
+    return NextResponse.json({ message: 'Erro ao salvar questão' }, { status: 500 })
+  }
+}

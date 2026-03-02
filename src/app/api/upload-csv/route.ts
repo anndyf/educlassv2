@@ -27,63 +27,117 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Arquivo CSV vazio' }, { status: 400 })
     }
 
-    let created = 0
-    let skipped = 0
-    const errors: string[] = []
+    // Listas para controle
+    const linesToProcess = lines.slice(1)
+    const skippedEntries: string[] = []
+    const toCreate: { matricula: string, nome: string, turmaNome: string }[] = []
+    
+    // 1. Validar duplicatas dentro do arquivo e verificar no BD
+    const matriculasInFile = new Set<string>()
+    const matriculasToQuery: string[] = []
+    const fileData: { matricula: string, nome: string, turmaNome: string }[] = []
 
-    // Processar cada linha (pulando o cabeçalho)
-    for (let i = 1; i < lines.length; i++) {
-      try {
-        const [nome, turmaNome] = lines[i].split(',').map(s => s.trim())
-        
-        if (!nome || !turmaNome) {
-          errors.push(`Linha ${i + 1}: Dados incompletos`)
-          continue
+    for (let i = 0; i < linesToProcess.length; i++) {
+        const parts = linesToProcess[i].split(',').map(s => s.trim())
+        let matricula = ""
+        let nome = ""
+        let turmaNome = ""
+
+        if (parts.length >= 3) {
+            [matricula, nome, turmaNome] = parts
+        } else if (parts.length === 2) {
+            [nome, turmaNome] = parts
         }
 
+        if (!nome || !turmaNome || !matricula) continue
+
+        // Monitorar duplicatas dentro do mesmo arquivo
+        if (matriculasInFile.has(matricula)) {
+            skippedEntries.push(`${nome} (${matricula}) - Duplicado no arquivo`)
+            continue
+        }
+        
+        matriculasInFile.add(matricula)
+        matriculasToQuery.push(matricula)
+        fileData.push({ matricula, nome, turmaNome })
+    }
+
+    // Buscar todos os existentes de uma vez
+    const existingInDb = await prisma.estudante.findMany({
+        where: { matricula: { in: matriculasToQuery } },
+        select: { matricula: true, nome: true }
+    })
+
+    const existingMatriculas = new Set(existingInDb.map((s: { matricula: string }) => s.matricula))
+
+    // Separar quem será criado e quem será pulado
+    for (const item of fileData) {
+        if (existingMatriculas.has(item.matricula)) {
+            skippedEntries.push(`${item.nome} (${item.matricula}) - Já cadastrado`)
+        } else {
+            toCreate.push(item)
+        }
+    }
+
+    if (toCreate.length === 0) {
+        return NextResponse.json({ 
+            message: "Nenhum novo estudante para cadastrar. Todos os registros já existem ou são duplicados.",
+            skipped: skippedEntries,
+            created: 0
+        }, { status: 200 })
+    }
+
+    // 3. Processar criação
+    let createdCount = 0
+    const bcrypt = await import('bcryptjs')
+
+    for (const data of toCreate) {
         // Buscar ou criar turma
         let turma = await prisma.turma.findFirst({
-          where: { nome: turmaNome }
+          where: { nome: data.turmaNome }
         })
 
         if (!turma) {
           turma = await prisma.turma.create({
-            data: { nome: turmaNome }
+            data: { nome: data.turmaNome }
           })
         }
 
-        // Verificar se estudante já existe
-        const estudanteExiste = await prisma.estudante.findFirst({
-          where: {
-            nome,
+        // Criar estudante
+        const estudante = await prisma.estudante.create({
+          data: {
+            nome: data.nome,
+            matricula: data.matricula,
             turmaId: turma.id
           }
         })
 
-        if (estudanteExiste) {
-          skipped++
-          continue
+        // Criar acesso ao portal
+        const hashedPassword = await bcrypt.hash(data.matricula, 10)
+        try {
+            await prisma.user.create({
+                data: {
+                    username: data.matricula,
+                    email: `${data.matricula}@educlass.com`,
+                    password: hashedPassword,
+                    name: data.nome,
+                    isPortalUser: true,
+                    estudanteId: estudante.matricula,
+                    isApproved: true,
+                    isActive: true
+                }
+            })
+        } catch (uErr) {
+            console.error('Erro na criação automática via importação:', uErr)
         }
 
-        // Criar estudante
-        await prisma.estudante.create({
-          data: {
-            nome,
-            turmaId: turma.id
-          }
-        })
-
-        created++
-      } catch (error) {
-        errors.push(`Linha ${i + 1}: ${error}`)
-      }
+        createdCount++
     }
 
     return NextResponse.json({
       message: 'Importação concluída',
-      created,
-      skipped,
-      errors: errors.length > 0 ? errors : undefined
+      created: createdCount,
+      skipped: skippedEntries
     })
   } catch (error) {
     console.error('Erro ao processar CSV:', error)

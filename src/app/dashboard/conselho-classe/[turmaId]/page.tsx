@@ -35,8 +35,8 @@ async function getNotasConselho(turmaId: string) {
   if (!turma) return null
 
   // Flatten notas
-  const notasConselho = turma.estudantes.flatMap(estudante =>
-    estudante.notas.map(nota => ({
+  const notasConselho = turma.estudantes.flatMap((estudante: any) =>
+    estudante.notas.map((nota: any) => ({
       id: nota.id,
       nota: nota.nota,
       nota1: nota.nota1,
@@ -44,7 +44,7 @@ async function getNotasConselho(turmaId: string) {
       nota3: nota.nota3,
       notaRecuperacao: nota.notaRecuperacao,
       status: nota.status,
-      estudanteId: estudante.id,
+      estudanteId: estudante.matricula,
       estudanteNome: estudante.nome,
       disciplinaId: nota.disciplinaId,
       disciplinaNome: nota.disciplina.nome

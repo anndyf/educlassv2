@@ -57,10 +57,10 @@ export default async function RelatorioTurmaPage({
   let totalRecuperacao = 0
   let totalDesistentes = 0
 
-  turma.estudantes.forEach(estudante => {
-    const aprovadas = estudante.notas.filter(n => n.status === 'APROVADO').length
-    const recuperacao = estudante.notas.filter(n => n.status === 'RECUPERACAO').length
-    const desistente = estudante.notas.filter(n => n.status === 'DESISTENTE').length
+  turma.estudantes.forEach((estudante: any) => {
+    const aprovadas = estudante.notas.filter((n: any) => n.status === 'APROVADO').length
+    const recuperacao = estudante.notas.filter((n: any) => n.status === 'RECUPERACAO').length
+    const desistente = estudante.notas.filter((n: any) => n.status === 'DESISTENTE').length
 
     if (desistente > 0) {
       totalDesistentes++
@@ -161,12 +161,12 @@ export default async function RelatorioTurmaPage({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {turma.estudantes.map((estudante) => {
-                    const aprovadas = estudante.notas.filter(n => n.status === 'APROVADO').length
-                    const recuperacao = estudante.notas.filter(n => n.status === 'RECUPERACAO').length
-                    const desistente = estudante.notas.some(n => n.status === 'DESISTENTE')
+                  {turma.estudantes.map((estudante: any) => {
+                    const aprovadas = estudante.notas.filter((n: any) => n.status === 'APROVADO').length
+                    const recuperacao = estudante.notas.filter((n: any) => n.status === 'RECUPERACAO').length
+                    const desistente = estudante.notas.some((n: any) => n.status === 'DESISTENTE')
                     const media = estudante.notas.length > 0
-                      ? (estudante.notas.reduce((acc, n) => acc + n.nota, 0) / estudante.notas.length).toFixed(2)
+                      ? (estudante.notas.reduce((acc: number, n: any) => acc + n.nota, 0) / estudante.notas.length).toFixed(2)
                       : '0.00'
 
                     let statusText = 'Pendente'
@@ -184,7 +184,7 @@ export default async function RelatorioTurmaPage({
                     }
 
                     return (
-                      <tr key={estudante.id} className="hover:bg-gray-50">
+                      <tr key={estudante.matricula} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <div className="flex items-center">
                             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">

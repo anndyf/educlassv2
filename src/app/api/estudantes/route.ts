@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
-    const { nome, turmaId } = await request.json()
+    const { nome, turmaId, matricula } = await request.json()
 
     if (!nome || nome.trim() === '') {
       return NextResponse.json(
@@ -22,9 +22,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!turmaId) {
+    if (!matricula) {
       return NextResponse.json(
-        { message: 'Turma é obrigatória' },
+        { message: 'Matrícula é obrigatória' },
         { status: 400 }
       )
     }
@@ -32,9 +32,33 @@ export async function POST(request: NextRequest) {
     const estudante = await prisma.estudante.create({
       data: {
         nome: nome.trim(),
-        turmaId
+        turmaId,
+        matricula
       }
     })
+
+    // Se tiver matrícula, criar acesso ao portal automaticamente
+    if (matricula) {
+      const bcrypt = await import('bcryptjs')
+      const hashedPassword = await bcrypt.hash(matricula, 10)
+      
+      try {
+        await prisma.user.create({
+            data: {
+              username: matricula,
+              email: `${matricula}@educlass.com`,
+              password: hashedPassword,
+              name: nome.trim(),
+              isPortalUser: true,
+              estudanteId: estudante.matricula,
+              isApproved: true,
+              isActive: true
+            }
+          })
+      } catch (userError) {
+          console.error('Erro ao criar usuário automático do portal:', userError)
+      }
+    }
 
     return NextResponse.json(estudante, { status: 201 })
   } catch (error) {

@@ -8,14 +8,19 @@ declare module "next-auth" {
       isSuperuser: boolean
       isDirecao: boolean
       isStaff: boolean
+      isPortalUser: boolean
+      estudanteId: string | null
     } & DefaultSession["user"]
   }
 
   interface User {
+    id: string
     username: string
     isSuperuser: boolean
     isDirecao: boolean
     isStaff: boolean
+    isPortalUser: boolean
+    estudanteId: string | null
   }
 }
 
@@ -26,5 +31,7 @@ declare module "next-auth/jwt" {
     isSuperuser: boolean
     isDirecao: boolean
     isStaff: boolean
+    isPortalUser: boolean
+    estudanteId: string | null
   }
 }

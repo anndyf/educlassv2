@@ -7,14 +7,21 @@ import Link from "next/link"
 export default function RegisterTeacherPage() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
+  const [confirmEmail, setConfirmEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+      setLoading(true)
     setError(null)
+
+    if (email !== confirmEmail) {
+      setError("Os e-mails informados não coincidem")
+      setLoading(false)
+      return
+    }
 
     try {
       const res = await fetch("/api/public/v1/register", {
@@ -109,6 +116,21 @@ export default function RegisterTeacherPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="seu@email.com"
+                className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 ml-1">
+                <Mail className="w-3 h-3" /> Confirmar E-mail
+              </label>
+              <input
+                type="email"
+                required
+                value={confirmEmail}
+                onChange={(e) => setConfirmEmail(e.target.value)}
+                onPaste={(e) => e.preventDefault()} // Prevent pasting to ensure typing
+                placeholder="Repita seu e-mail"
                 className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none"
               />
             </div>

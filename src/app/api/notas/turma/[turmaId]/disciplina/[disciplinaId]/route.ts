@@ -34,7 +34,7 @@ export async function GET(
         nf."is_desistente_unid2" as "isDesistenteUnid2",
         nf."is_desistente_unid3" as "isDesistenteUnid3"
       FROM "notas_finais" nf
-      INNER JOIN "estudantes" e ON e.id = nf."estudante_id"
+      INNER JOIN "estudantes" e ON e.matricula = nf."estudante_id"
       WHERE nf."disciplina_id" = ${disciplinaId} AND e."turma_id" = ${turmaId}
     `
 

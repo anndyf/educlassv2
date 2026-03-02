@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { hash } from 'bcryptjs'
+import { logAudit } from '@/lib/audit'
 
 export const runtime = 'nodejs'
 
@@ -55,11 +56,20 @@ export async function PUT(
 
     try {
       // Tentar atualização normal via Prisma Client
-      await prisma.user.update({
-        where: { id },
-        data: updateData
-      })
-      return NextResponse.json({ message: 'Usuário atualizado com sucesso' })
+        await prisma.user.update({
+          where: { id },
+          data: updateData
+        })
+        
+        await logAudit(
+          session.user.id,
+          'USUARIO',
+          id,
+          'UPDATE',
+          { fields: Object.keys(updateData).filter(k => k !== 'password') }
+        )
+
+        return NextResponse.json({ message: 'Usuário atualizado com sucesso' })
     } catch (prismaError: any) {
       console.warn('Prisma Client falhou no UPDATE, tentando fallback via SQL bruto...', prismaError.message)
       
@@ -94,6 +104,14 @@ export async function PUT(
         }
       }
 
+      await logAudit(
+        session.user.id,
+        'USUARIO',
+        id,
+        'UPDATE',
+        { method: 'SQL_FALLBACK', fields: sqlFields.map((f: string) => f.split(' ')[0]) }
+      )
+
       return NextResponse.json({ message: 'Usuário atualizado via SQL (Fallback)' })
     }
 
@@ -123,9 +141,22 @@ export async function DELETE(
       return NextResponse.json({ message: 'Você não pode excluir seu próprio usuário' }, { status: 400 })
     }
 
+    const userToDelete = await prisma.user.findUnique({ where: { id } })
+    if (!userToDelete) {
+      return NextResponse.json({ message: 'Usuário não encontrado' }, { status: 404 })
+    }
+
     await prisma.user.delete({
       where: { id }
     })
+
+    await logAudit(
+      session.user.id,
+      'USUARIO',
+      id,
+      'DELETE',
+      { name: userToDelete.name, email: userToDelete.email }
+    )
 
     return NextResponse.json({ message: 'Usuário excluído com sucesso' })
 

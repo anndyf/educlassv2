@@ -1,170 +1,113 @@
+
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
-import bcrypt from 'bcryptjs'
 import * as dotenv from 'dotenv'
 
 dotenv.config()
 
+// Sanitize DB URL
+let dbUrl = process.env.DATABASE_URL;
+if (dbUrl && dbUrl.startsWith('"') && dbUrl.endsWith('"')) {
+  dbUrl = dbUrl.substring(1, dbUrl.length - 1);
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL!
+  connectionString: dbUrl!
 })
 
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
 async function main() {
-  console.log('🚀 Iniciando migração de dados do Django para Prisma...\n')
+  console.log('📝 Iniciando preenchimento de notas nos estudantes existentes...')
 
   try {
-    // Limpar dados existentes (cuidado em produção!)
-    console.log('🗑️  Limpando dados existentes...')
-    await prisma.notaFinalAudit.deleteMany()
-    await prisma.notaFinal.deleteMany()
-    await prisma.estudante.deleteMany()
-    await prisma.disciplina.deleteMany()
-    await prisma.turma.deleteMany()
-    await prisma.user.deleteMany()
-    console.log('✅ Dados limpos\n')
-
-    // Criar usuário admin
-    console.log('👤 Criando usuário admin...')
-    const hashedPassword = await bcrypt.hash('admin123', 10)
-    
-    const admin = await prisma.user.create({
-      data: {
-        email: 'admin@cetep.com',
-        username: 'admin',
-        password: hashedPassword,
-        name: 'Administrador',
-        isSuperuser: true,
-        isStaff: true,
-        isActive: true
-      }
-    })
-    console.log(`✅ Admin criado: ${admin.username}\n`)
-
-    // Criar turmas de exemplo
-    console.log('🏫 Criando turmas...')
-    const turma1 = await prisma.turma.create({
-      data: {
-        nome: '1º TIM - Técnico em Informática - Matutino',
-        usuariosPermitidos: {
-          connect: { id: admin.id }
-        }
-      }
+    // 1. Buscar o admin (para marcar quem modificou a nota)
+    const admin = await prisma.user.findFirst({
+      where: { OR: [{ isSuperuser: true }, { username: 'admin' }] }
     })
 
-    const turma2 = await prisma.turma.create({
-      data: {
-        nome: '2º TIM - Técnico em Informática - Noturno',
-        usuariosPermitidos: {
-          connect: { id: admin.id }
-        }
-      }
-    })
-    console.log(`✅ Turmas criadas: ${turma1.nome}, ${turma2.nome}\n`)
+    if (!admin) {
+      console.error('❌ Erro: Nenhum usuário administrador encontrado. Crie um admin primeiro.')
+      return
+    }
 
-    // Criar disciplinas
-    console.log('📚 Criando disciplinas...')
-    const disciplinas = await Promise.all([
-      prisma.disciplina.create({
-        data: {
-          nome: 'Programação Web',
-          turmaId: turma1.id,
-          usuariosPermitidos: {
-            connect: { id: admin.id }
+    // 2. Buscar todos os estudantes com suas turmas e disciplinas da turma
+    const estudantes = await prisma.estudante.findMany({
+      include: {
+        turma: {
+          include: {
+            disciplinas: true
           }
         }
-      }),
-      prisma.disciplina.create({
-        data: {
-          nome: 'Banco de Dados',
-          turmaId: turma1.id,
-          usuariosPermitidos: {
-            connect: { id: admin.id }
-          }
-        }
-      }),
-      prisma.disciplina.create({
-        data: {
-          nome: 'Redes de Computadores',
-          turmaId: turma2.id,
-          usuariosPermitidos: {
-            connect: { id: admin.id }
-          }
-        }
-      })
-    ])
-    console.log(`✅ ${disciplinas.length} disciplinas criadas\n`)
-
-    // Criar estudantes
-    console.log('🎓 Criando estudantes...')
-    const estudantes = await Promise.all([
-      prisma.estudante.create({
-        data: {
-          nome: 'João Silva',
-          turmaId: turma1.id
-        }
-      }),
-      prisma.estudante.create({
-        data: {
-          nome: 'Maria Santos',
-          turmaId: turma1.id
-        }
-      }),
-      prisma.estudante.create({
-        data: {
-          nome: 'Pedro Oliveira',
-          turmaId: turma2.id
-        }
-      }),
-      prisma.estudante.create({
-        data: {
-          nome: 'Ana Costa',
-          turmaId: turma2.id
-        }
-      })
-    ])
-    console.log(`✅ ${estudantes.length} estudantes criados\n`)
-
-    // Criar notas de exemplo
-    console.log('📝 Criando notas...')
-    await prisma.notaFinal.create({
-      data: {
-        estudanteId: estudantes[0].id,
-        disciplinaId: disciplinas[0].id,
-        nota: 8.5,
-        status: 'APROVADO',
-        modifiedById: admin.id
       }
     })
 
-    await prisma.notaFinal.create({
-      data: {
-        estudanteId: estudantes[1].id,
-        disciplinaId: disciplinas[0].id,
-        nota: 4.0,
-        status: 'RECUPERACAO',
-        modifiedById: admin.id
-      }
-    })
-    console.log('✅ Notas criadas\n')
+    if (estudantes.length === 0) {
+      console.log('⚠️ Nenhum estudante encontrado no banco de dados.')
+      return
+    }
 
-    console.log('🎉 Migração concluída com sucesso!')
-    console.log('\n📊 Resumo:')
-    console.log(`   - Usuários: 1`)
-    console.log(`   - Turmas: 2`)
-    console.log(`   - Disciplinas: ${disciplinas.length}`)
-    console.log(`   - Estudantes: ${estudantes.length}`)
-    console.log(`   - Notas: 2`)
-    console.log('\n🔑 Credenciais de acesso:')
-    console.log('   Username: admin')
-    console.log('   Password: admin123')
+    console.log(`🔍 Processando ${estudantes.length} estudantes...`)
+
+    let notasCriadas = 0
+    let notasPuladas = 0
+
+    for (const estudante of estudantes) {
+      const disciplinas = estudante.turma?.disciplinas || []
+      
+      if (disciplinas.length === 0) {
+        console.log(`🔸 Estudante ${estudante.nome} está em uma turma sem disciplinas.`)
+        continue
+      }
+
+      for (const disciplina of disciplinas) {
+        // Verificar se já existe nota para este estudante nesta disciplina
+        const notaExistente = await prisma.notaFinal.findUnique({
+          where: {
+            estudanteId_disciplinaId: {
+              estudanteId: estudante.matricula,
+              disciplinaId: disciplina.id
+            }
+          }
+        })
+
+        if (notaExistente) {
+          notasPuladas++
+          continue
+        }
+
+        // Gerar uma nota aleatória mesclada (Aprovado ou Recuperação)
+        // Usamos a matrícula ou index para manter consistente mas variado
+        const seed = parseInt(estudante.matricula.slice(-1)) || 0
+        const isApproved = seed % 2 === 0
+        const valorNota = isApproved ? (7.5 + (seed / 5)) : (3.5 + (seed / 4))
+        const status = isApproved ? 'APROVADO' : 'RECUPERACAO'
+
+        await prisma.notaFinal.create({
+          data: {
+            estudanteId: estudante.matricula,
+            disciplinaId: disciplina.id,
+            nota: parseFloat(valorNota.toFixed(1)),
+            status: status as any,
+            modifiedById: admin.id,
+            // Preencher notas parciais também para o dashboard ficar bonito
+            nota1: parseFloat((valorNota * 0.8).toFixed(1)),
+            nota2: parseFloat((valorNota * 0.9).toFixed(1)),
+            nota3: valorNota
+          }
+        })
+        notasCriadas++
+      }
+    }
+
+    console.log('\n✨ Processo de lançamento concluído!')
+    console.log(`✅ Notas novas criadas: ${notasCriadas}`)
+    console.log(`ℹ️ Notas já existentes (mantidas): ${notasPuladas}`)
 
   } catch (error) {
-    console.error('❌ Erro durante a migração:', error)
-    throw error
+    console.error('❌ Erro ao lançar notas:', error)
   }
 }
 

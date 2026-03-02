@@ -1,0 +1,110 @@
+
+"use client"
+
+import { useState, useRef, useEffect } from "react"
+import { Shield, ShieldCheck, ShieldX, ChevronDown, Loader2 } from "lucide-react"
+import { activateAllPortals, deactivateAllPortals } from "./actions"
+
+export default function PortalActionsMenu() {
+  const [isOpen, setIsOpen] = useState(false)
+  const [loading, setLoading] = useState<"activate" | "deactivate" | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleActivate = async () => {
+    if (!confirm("Isso criará acesso ao portal para TODOS os alunos que ainda não possuem. A senha inicial será o número de matrícula. Deseja continuar?")) {
+      return
+    }
+
+    setLoading("activate")
+    const res = await activateAllPortals()
+    if (res.error) {
+      alert(res.error)
+    } else {
+      alert(`${res.count || 0} acessos ao portal foram criados com sucesso.`)
+    }
+    setLoading(null)
+    setIsOpen(false)
+  }
+
+  const handleDeactivate = async () => {
+    if (!confirm("🚨 ATENÇÃO: Isso removerá o acesso de TODOS os alunos ao portal. Eles não conseguirão logar até que o acesso seja reativado individualmente. Deseja continuar?")) {
+      return
+    }
+
+    setLoading("deactivate")
+    const res = await deactivateAllPortals()
+    if (res.error) {
+      alert(res.error)
+    } else {
+      alert("Todos os portais foram desativados com sucesso.")
+    }
+    setLoading(null)
+    setIsOpen(false)
+  }
+
+  return (
+    <div className="relative w-full md:w-auto" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        disabled={loading !== null}
+        className="flex items-center justify-between md:justify-start w-full md:w-auto space-x-2 bg-white text-slate-700 border border-slate-200 px-4 py-2.5 rounded-lg hover:bg-slate-50 transition-all shadow-sm font-medium text-sm"
+      >
+        <div className="flex items-center space-x-2">
+          <Shield size={16} className="text-slate-500" />
+          <span>Gestão de Acessos</span>
+        </div>
+        <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 left-0 md:left-auto mt-2 w-full md:w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="px-4 py-2 mb-1 border-b border-slate-100">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ações em Lote</span>
+          </div>
+          
+          <button
+            onClick={handleActivate}
+            disabled={loading !== null}
+            className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors text-left"
+          >
+            {loading === "activate" ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <ShieldCheck size={16} />
+            )}
+            <div>
+              <p className="font-semibold">Ativar Todos</p>
+              <p className="text-[10px] text-emerald-600/70">Cria acesso para alunos sem portal</p>
+            </div>
+          </button>
+
+          <button
+            onClick={handleDeactivate}
+            disabled={loading !== null}
+            className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
+          >
+            {loading === "deactivate" ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <ShieldX size={16} />
+            )}
+            <div>
+              <p className="font-semibold">Desativar Todos</p>
+              <p className="text-[10px] text-red-600/70">Remove acesso de todos os alunos</p>
+            </div>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}

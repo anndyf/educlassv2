@@ -7,9 +7,22 @@ import {
   GraduationCap, 
   FileText, 
   TrendingUp,
-  Award
+  Award,
+  Scissors,
+  MessageSquare,
+  Shield,
+  ChevronRight,
+  Bell,
+  Megaphone,
+  Info,
+  ArrowRight,
+  Database,
+  AlertTriangle,
+  Fingerprint,
+  History
 } from "lucide-react"
 import Link from "next/link"
+import TeacherTipsModal from "@/components/TeacherTipsModal"
 
 import { Session } from "next-auth"
 
@@ -17,18 +30,67 @@ async function getDashboardStats(session: Session) {
   const isManagement = session.user.isSuperuser || session.user.isDirecao
 
   if (isManagement) {
-    const [turmasCount, disciplinasCount, estudantesCount, notasCount] = await Promise.all([
-      prisma.turma.count(),
-      prisma.disciplina.count(),
-      prisma.estudante.count(),
-      prisma.notaFinal.count()
+    const config = await prisma.globalConfig.findUnique({ where: { id: 'global' } })
+    const currentYear = config?.anoLetivoAtual || new Date().getFullYear()
+
+    const [
+      turmasCount, 
+      disciplinasCount, 
+      estudantesCount, 
+      notasCount,
+      disciplinasComNotasCount,
+      novasQuestoesCount,
+      recuperacaoCount
+    ] = await Promise.all([
+      prisma.turma.count({ where: { anoLetivo: currentYear } }),
+      prisma.disciplina.count({ where: { turma: { anoLetivo: currentYear } } }),
+      prisma.estudante.count({ where: { turma: { anoLetivo: currentYear } } }),
+      prisma.notaFinal.count({ where: { disciplina: { turma: { anoLetivo: currentYear } } } }),
+      prisma.disciplina.count({
+        where: {
+          turma: { anoLetivo: currentYear },
+          notas: { some: {} }
+        }
+      }),
+      prisma.questao.count({
+        where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }
+      }),
+      prisma.estudante.count({
+        where: {
+          turma: { anoLetivo: currentYear },
+          notas: {
+            some: {
+              status: 'RECUPERACAO'
+            }
+          }
+        }
+      })
     ])
+
+    const adesaoValue = disciplinasCount > 0 ? (disciplinasComNotasCount / disciplinasCount) * 100 : 0
 
     return {
       turmas: turmasCount,
       disciplinas: disciplinasCount,
       estudantes: estudantesCount,
-      notas: notasCount
+      notas: notasCount,
+      adesao: adesaoValue.toFixed(1),
+      novasQuestoes: novasQuestoesCount,
+      recuperacao: recuperacaoCount,
+      announcements: await prisma.message.findMany({
+        where: { 
+          category: 'COMUNICADO',
+          OR: [
+            { receiverId: null },
+            { receiverId: 'GROUP_STAFF' },
+            { receiverId: 'GROUP_TEACHERS' },
+            { receiverId: 'GROUP_DIRECAO' }
+          ]
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 2,
+        include: { sender: { select: { name: true } } }
+      })
     }
   }
 
@@ -45,15 +107,31 @@ async function getDashboardStats(session: Session) {
     }
   })
 
-  const disciplinasIds = user?.disciplinasPermitidas.map(d => d.id) || []
-  const turmasIds = Array.from(new Set(user?.disciplinasPermitidas.map(d => d.turmaId) || []))
+  const disciplinasIds = user?.disciplinasPermitidas.map((d: any) => d.id) || []
+  const turmasIds = Array.from(new Set(user?.disciplinasPermitidas.map((d: any) => d.turmaId) || []))
 
-  const [estudantesCount, notasCount] = await Promise.all([
+  const [estudantesCount, notasCount, announcements] = await Promise.all([
     prisma.estudante.count({
       where: { turmaId: { in: turmasIds } }
     }),
     prisma.notaFinal.count({
       where: { disciplinaId: { in: disciplinasIds } }
+    }),
+    prisma.message.findMany({
+      where: { 
+        category: 'COMUNICADO',
+        OR: [
+          { receiverId: null },
+          { receiverId: 'GROUP_TEACHERS' }
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 2,
+      include: {
+        sender: {
+          select: { name: true }
+        }
+      }
     })
   ])
 
@@ -61,7 +139,8 @@ async function getDashboardStats(session: Session) {
     turmas: turmasIds.length,
     disciplinas: disciplinasIds.length,
     estudantes: estudantesCount,
-    notas: notasCount
+    notas: notasCount,
+    announcements
   }
 }
 
@@ -74,28 +153,37 @@ export default async function DashboardPage() {
 
   const stats = await getDashboardStats(session)
 
+  const supportTips = [
+    {
+      title: "Suporte e Ajuda",
+      description: "Olá! Caso encontre qualquer dificuldade ou problema técnico ao navegar pelo sistema, utilize a seção de 'Mensagens' para entrar em contato diretamente com a equipe de suporte.",
+      icon: <MessageSquare className="w-10 h-10 text-blue-600" />,
+      color: "bg-blue-600"
+    }
+  ]
+
   const allCards = [
     {
-      title: "Minhas Turmas",
+      title: session.user.isSuperuser || session.user.isDirecao ? "Total de Turmas" : "Minhas Turmas",
       value: stats.turmas,
       icon: Users,
       color: "from-blue-500 to-blue-600",
-      href: "/dashboard/notas",
-      visible: true // Sempre visível, mas os dados mudam conforme o papel
+      href: session.user.isSuperuser || session.user.isDirecao ? "/dashboard/turmas" : "/dashboard/notas",
+      visible: true
     },
     {
-      title: "Minhas Disciplinas",
+      title: session.user.isSuperuser || session.user.isDirecao ? "Disciplinas" : "Minhas Disciplinas",
       value: stats.disciplinas,
       icon: BookOpen,
       color: "from-purple-500 to-purple-600",
-      href: "/dashboard/notas",
+      href: session.user.isSuperuser || session.user.isDirecao ? "/dashboard/disciplinas" : "/dashboard/notas",
       visible: true
     },
     {
       title: "Estudantes",
       value: stats.estudantes,
       icon: GraduationCap,
-      color: "from-green-500 to-green-600",
+      color: "from-emerald-500 to-emerald-600",
       href: "/dashboard/estudantes",
       visible: session.user.isSuperuser || session.user.isDirecao
     },
@@ -103,9 +191,9 @@ export default async function DashboardPage() {
       title: "Notas Lançadas",
       value: stats.notas,
       icon: FileText,
-      color: "from-orange-500 to-orange-600",
+      color: "from-amber-500 to-amber-600",
       href: "/dashboard/notas",
-      visible: true // Todos podem ver o volume de trabalho
+      visible: true
     }
   ]
 
@@ -143,211 +231,270 @@ export default async function DashboardPage() {
       href: "/dashboard/conselho-classe",
       color: "bg-pink-600 hover:bg-pink-700",
       visible: session.user.isDirecao || session.user.isSuperuser
+    },
+    {
+      title: "Gerenciar Turmas",
+      description: "Visualizar e organizar turmas",
+      icon: Users,
+      href: "/dashboard/turmas",
+      color: "bg-emerald-600 hover:bg-emerald-700",
+      visible: session.user.isDirecao || session.user.isSuperuser
+    },
+    {
+      title: "Gerenciar Estudantes",
+      description: "Cadastro e dados dos alunos",
+      icon: GraduationCap,
+      href: "/dashboard/estudantes",
+      color: "bg-orange-600 hover:bg-orange-700",
+      visible: session.user.isDirecao || session.user.isSuperuser
+    },
+    {
+      title: "Gerador de Provas",
+      description: "Criar avaliações e histórico",
+      icon: Scissors,
+      href: "/dashboard/provas",
+      color: "bg-blue-700 hover:bg-blue-800",
+      visible: session.user.isDirecao || session.user.isSuperuser
+    },
+    {
+      title: "Mensagens",
+      description: "Comunicados e avisos",
+      icon: MessageSquare,
+      href: "/dashboard/mensagens",
+      color: "bg-indigo-500 hover:bg-indigo-600",
+      visible: true
+    },
+    {
+      title: "Auditoria",
+      description: "Logs de alterações",
+      icon: History,
+      href: "/dashboard/auditoria",
+      color: "bg-slate-900 hover:bg-slate-800",
+      visible: session.user.isSuperuser
     }
   ]
 
   const quickActions = allQuickActions.filter(a => a.visible)
 
   return (
-    <div className="space-y-6 pb-10">
-      {/* Hero Welcome Section - Compact Version */}
-      <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-6 md:p-8 shadow-xl shadow-slate-200 border border-slate-800">
-        <div className="relative z-10">
-          {/* Mobile Layout - Centralizado */}
-          <div className="md:hidden flex flex-col items-center text-center space-y-4">
-            {/* Ilustração centralizada */}
-            <div className="relative w-32 h-32 mb-2">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-pink-500 to-rose-500 rounded-full flex items-center justify-center shadow-2xl shadow-pink-500/50">
-                  <GraduationCap className="w-10 h-10 text-white" />
-                </div>
-              </div>
-              
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2">
-                <div className="w-9 h-9 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                  <Users className="w-4 h-4 text-white" />
-                </div>
-              </div>
-              
-              <div className="absolute top-1/2 right-0 translate-x-2 -translate-y-1/2">
-                <div className="w-9 h-9 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
-                  <BookOpen className="w-4 h-4 text-white" />
-                </div>
-              </div>
-              
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-2">
-                <div className="w-9 h-9 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                  <FileText className="w-4 h-4 text-white" />
-                </div>
-              </div>
-              
-              <div className="absolute top-1/2 left-0 -translate-x-2 -translate-y-1/2">
-                <div className="w-9 h-9 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                  <Award className="w-4 h-4 text-white" />
-                </div>
-              </div>
-              
-              <svg className="absolute inset-0 w-full h-full" style={{zIndex: -1}}>
-                <line x1="50%" y1="50%" x2="50%" y2="10%" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
-                <line x1="50%" y1="50%" x2="90%" y2="50%" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
-                <line x1="50%" y1="50%" x2="50%" y2="90%" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
-                <line x1="50%" y1="50%" x2="10%" y2="50%" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
-              </svg>
+    <div className="max-w-7xl mx-auto space-y-10 pb-12 animate-in fade-in duration-500">
+      <TeacherTipsModal 
+        storageKey="seen_support_popup_v1"
+        title="Dica de Suporte"
+        tips={supportTips}
+      />
+
+      {/* Dynamic Greeting Section - Highlighted & Elegant */}
+      <section className="relative overflow-hidden bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl -mr-32 -mt-32"></div>
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-2xl -ml-24 -mb-24"></div>
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-blue-600 text-[10px] font-black uppercase tracking-[0.2em] mb-1">
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+              <span>Painel de Controle EduClass - CETEP/LNAB</span>
             </div>
-            
-            <p className="text-sm font-bold text-slate-400 uppercase tracking-wide leading-tight">
-              Centro Territorial de Educação Profissional do Litoral Norte e Agreste Baiano
-            </p>
-            
-            <div className="inline-flex items-center space-x-2 px-2.5 py-0.5 bg-pink-500/10 border border-pink-500/20 rounded-full">
-              <span className="w-1 h-1 bg-pink-500 rounded-full animate-pulse" />
-              <span className="text-[9px] font-black text-pink-500 uppercase tracking-wider">Painel</span>
-            </div>
-            
-            <h2 className="text-2xl font-black text-white tracking-tight leading-tight">
-              Olá, <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-400">{session.user.name?.split(' ')[0]}</span>!<br />
-              Gerencie tudo em um só lugar.
-            </h2>
-            
-            <p className="text-slate-400 font-medium text-sm max-w-sm leading-relaxed">
-              Acompanhe o desenvolvimento dos estudantes e tome decisões pedagógicas fundamentadas em dados.
+            <h1 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight">
+              Olá, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">{session.user.name?.split(' ')[0]}</span>.
+            </h1>
+            <p className="text-slate-500 text-base md:text-lg font-medium leading-relaxed max-w-xl">
+              Seu ambiente de gestão acadêmica está pronto. <span className="text-slate-900 font-bold">Confira os novos comunicados</span> e as métricas atualizadas.
             </p>
           </div>
           
-          {/* Desktop Layout - Lado a lado */}
-          <div className="hidden md:flex md:items-center justify-between gap-6">
-            <div className="space-y-4 flex-1">
-              <p className="text-sm font-bold text-slate-400 uppercase tracking-wide leading-tight mb-3">
-                Centro Territorial de Educação Profissional do Litoral Norte e Agreste Baiano
-              </p>
-              <div className="inline-flex items-center space-x-2 px-2.5 py-0.5 bg-pink-500/10 border border-pink-500/20 rounded-full">
-                <span className="w-1 h-1 bg-pink-500 rounded-full animate-pulse" />
-                <span className="text-[9px] font-black text-pink-500 uppercase tracking-wider">Painel</span>
+          <div className="flex flex-wrap items-center gap-3">
+             <div className="px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3 shadow-sm hover:border-blue-200 transition-colors">
+                <div className="w-10 h-10 rounded-xl bg-blue-600/10 flex items-center justify-center">
+                  <Bell className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">Ano Letivo</p>
+                  <p className="text-sm font-bold text-slate-900">EduClass 2026</p>
+                </div>
+             </div>
+             
+             <div className="px-5 py-3 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3 shadow-sm">
+                <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                <div>
+                  <p className="text-[10px] font-black text-emerald-600 uppercase leading-none mb-1">Sistemas</p>
+                  <p className="text-sm font-bold text-emerald-700">Online</p>
+                </div>
+             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* System Highlights Bar - Visible only for Management */}
+      {(session.user.isSuperuser || session.user.isDirecao) && (
+        <section className="bg-slate-50/50 border border-slate-200 rounded-[2rem] p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+            <div className="flex items-center gap-4 px-4 py-2">
+              <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-blue-600 shadow-sm shrink-0">
+                 <FileText className="w-5 h-5" />
               </div>
-              <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight leading-tight mt-2">
-                Olá, <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-400">{session.user.name?.split(' ')[0]}</span>!<br />
-                Gerencie tudo em um só lugar.
-              </h2>
-              <p className="text-slate-400 font-medium text-sm max-w-md leading-relaxed mt-3">
-                Acompanhe o desenvolvimento dos estudantes e tome decisões pedagógicas fundamentadas em dados.
-              </p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Adesão de Notas</p>
+                  <span className="text-[10px] font-bold text-slate-900">{stats.adesao}%</span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full transition-all duration-1000" style={{ width: `${stats.adesao}%` }}></div>
+                </div>
+                <p className="text-[9px] text-slate-500 font-medium mt-1 truncate">
+                  Disciplinas com lançamentos
+                </p>
+              </div>
             </div>
-            
-            {/* Ilustração - Desktop */}
-            <div className="flex items-center justify-center">
-              <div className="relative w-32 h-32 lg:w-40 lg:h-40">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-20 h-20 lg:w-24 lg:h-24 bg-gradient-to-br from-pink-500 to-rose-500 rounded-full flex items-center justify-center shadow-2xl shadow-pink-500/50">
-                    <GraduationCap className="w-10 h-10 lg:w-12 lg:h-12 text-white" />
-                  </div>
-                </div>
-                
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2">
-                  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                    <Users className="w-5 h-5 text-white" />
-                  </div>
-                </div>
-                
-                <div className="absolute top-1/2 right-0 translate-x-2 -translate-y-1/2">
-                  <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
-                    <BookOpen className="w-5 h-5 text-white" />
-                  </div>
-                </div>
-                
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-2">
-                  <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                    <FileText className="w-5 h-5 text-white" />
-                  </div>
-                </div>
-                
-                <div className="absolute top-1/2 left-0 -translate-x-2 -translate-y-1/2">
-                  <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                    <Award className="w-5 h-5 text-white" />
-                  </div>
-                </div>
-                
-                <svg className="absolute inset-0 w-full h-full" style={{zIndex: -1}}>
-                  <line x1="50%" y1="50%" x2="50%" y2="10%" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
-                  <line x1="50%" y1="50%" x2="90%" y2="50%" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
-                  <line x1="50%" y1="50%" x2="50%" y2="90%" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
-                  <line x1="50%" y1="50%" x2="10%" y2="50%" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
-                </svg>
+
+            <div className="flex items-center gap-4 px-4 py-2">
+              <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-emerald-600 shadow-sm shrink-0">
+                 <Database className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Banco de Questões</p>
+                <p className="text-xs font-bold text-slate-800 truncate">+{stats.novasQuestoes} novas questões</p>
+                <p className="text-[9px] text-slate-500 font-medium whitespace-nowrap">Criadas nos últimos 7 dias</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 px-4 py-2">
+              <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-rose-600 shadow-sm shrink-0">
+                 <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-0.5">Recuperação</p>
+                <p className="text-xs font-bold text-slate-800 truncate">{stats.recuperacao} Alunos Pendentes</p>
+                <p className="text-[9px] text-rose-600 font-bold whitespace-nowrap flex items-center gap-1">
+                  <span className="w-1 h-1 bg-rose-500 rounded-full"></span>
+                  Atenção necessária
+                </p>
               </div>
             </div>
           </div>
+        </section>
+      )}
+
+      {/* Comunicados Gerais - Above Metrics */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Megaphone className="w-4 h-4 text-blue-600" />
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Comunicados Gerais</h3>
+          </div>
+          <div className="h-px bg-slate-200 flex-1 mx-6"></div>
+          <Link href="/dashboard/mensagens" className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline">Ver Todos</Link>
         </div>
-        
-        {/* Decorative Elements - Smaller for less bloat */}
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-pink-500/10 rounded-full blur-[80px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-48 h-48 bg-blue-500/5 rounded-full blur-[60px] pointer-events-none" />
+
+        <div className="space-y-6">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {stats.announcements && stats.announcements.length > 0 ? (
+              stats.announcements.map((msg: any) => (
+                <div key={msg.id} className="bg-white border-2 border-slate-100 p-6 rounded-[2rem] group hover:border-blue-500/20 hover:shadow-xl hover:shadow-blue-500/5 transition-all duration-500 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl -mr-16 -mt-16 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  
+                  <div className="flex items-start gap-5 relative z-10">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all duration-500">
+                      <Info className="w-6 h-6 text-blue-600 group-hover:text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-base font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors uppercase tracking-tight">{msg.subject}</h4>
+                        <span className="text-[10px] font-black text-slate-400 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-full whitespace-nowrap">
+                          {new Date(msg.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed mb-4 font-medium italic opacity-80">
+                        "{msg.content.replace(/<[^>]*>?/gm, '')}"
+                      </p>
+                      <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-50">
+                         <div className="flex items-center gap-2">
+                           <div className="w-6 h-6 rounded-lg bg-slate-900 flex items-center justify-center text-[10px] font-black text-white">
+                             {msg.sender.name?.charAt(0)}
+                           </div>
+                           <span className="text-[11px] text-slate-400 font-bold tracking-tight">Postado por <span className="text-slate-900">{msg.sender.name}</span></span>
+                         </div>
+                         <Link href={`/dashboard/mensagens`} className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:translate-x-1 transition-transform flex items-center gap-1">
+                           Ler Tudo <ChevronRight size={12} />
+                         </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="md:col-span-2 p-12 text-center bg-slate-50/50 border-2 border-dashed border-slate-200 rounded-[2.5rem]">
+                <Megaphone className="w-10 h-10 text-slate-300 mx-auto mb-4 opacity-50" />
+                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Nenhum comunicado recente no sistema</p>
+              </div>
+            )}
+           </div>
+        </div>
       </div>
 
-      {/* Stats Quick View */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Metrics Separator */}
+      <div className="flex items-center justify-between pt-4">
+        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Métricas do Sistema</h3>
+        <div className="h-px bg-slate-200 flex-1 mx-6"></div>
+      </div>
+
+      {/* Stats Grid - Symmetric Columns */}
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${session.user.isSuperuser || session.user.isDirecao ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
         {cards.map((card) => {
           const Icon = card.icon
           return (
             <Link
               key={card.title}
               href={card.href}
-              className="group bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all hover:-translate-y-1 block relative overflow-hidden"
+              className="group bg-white border border-slate-200 p-5 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-200 transition-all duration-300"
             >
-              <div className="relative z-10 flex items-center justify-between">
-                <div>
-                  <h3 className="text-slate-400 text-xs font-black uppercase tracking-widest mb-2">{card.title}</h3>
-                  <div className="flex items-end space-x-2">
-                    <p className="text-3xl font-black text-slate-900 tracking-tighter leading-none">{card.value}</p>
-                    <div className="pb-1">
-                      <TrendingUp className="w-4 h-4 text-emerald-500" />
-                    </div>
+              <div className="flex items-start justify-between">
+                <div className="space-y-3">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{card.title}</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-slate-900 tracking-tight">{card.value}</span>
                   </div>
                 </div>
-                <div className={`w-12 h-12 bg-gradient-to-br ${card.color} rounded-[1rem] flex items-center justify-center shadow-lg transform group-hover:rotate-12 transition-transform`}>
-                  <Icon className="w-6 h-6 text-white" />
+                <div className={`p-2.5 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors shadow-sm`}>
+                  <Icon size={18} strokeWidth={2.5} />
                 </div>
               </div>
-              <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-slate-50/50 rounded-full blur-2xl group-hover:bg-pink-50/50 transition-colors" />
             </Link>
           )
         })}
       </div>
 
-      {/* Action Center */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between px-2">
-          <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.25em]">Centro de Operações</h3>
-          <div className="h-px bg-slate-100 flex-1 mx-6" />
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
-          {quickActions.map((action) => {
-            const Icon = action.icon
-            return (
-              <Link
-                key={action.title}
-                href={action.href}
-                className="group relative bg-white border border-slate-100 p-4 rounded-3xl shadow-sm hover:shadow-2xl transition-all active:scale-[0.98] overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                
-                <div className="relative z-10 flex items-center space-x-4">
-                  <div className={`w-12 h-12 ${action.color.split(' ')[0]} rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300 shrink-0`}>
-                    <Icon className="w-5 h-5 text-white" />
+      {/* Main Content Sections */}
+      <div className="space-y-12">
+        {/* Operations Hub - Symmetric Tiles */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Centro de Operações</h3>
+            <div className="h-px bg-slate-200 flex-1 mx-6"></div>
+          </div>
+          
+          <div className={`grid grid-cols-1 sm:grid-cols-2 ${session.user.isSuperuser || session.user.isDirecao ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
+            {quickActions.map((action) => {
+              const Icon = action.icon
+              return (
+                <Link
+                  key={action.title}
+                  href={action.href}
+                  className="group flex items-center gap-4 p-5 bg-white border border-slate-200 rounded-3xl hover:border-blue-300 hover:shadow-lg transition-all active:scale-[0.98]"
+                >
+                  <div className={`w-12 h-12 ${action.color} rounded-2xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 shrink-0`}>
+                    <Icon className="w-6 h-6 text-white" />
                   </div>
-                  <div className="min-w-0">
-                    <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-tight mb-0.5 truncate">{action.title}</h4>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider truncate">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-[13px] font-black text-slate-900 leading-tight mb-0.5 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{action.title}</h4>
+                    <p className="text-[11px] text-slate-500 font-medium truncate opacity-70">
                       {action.description}
                     </p>
                   </div>
-                </div>
-                
-                <div className="absolute right-4 opacity-0 group-hover:opacity-30 transition-opacity translate-x-2 group-hover:translate-x-0 transform duration-300">
-                  <TrendingUp className="rotate-90 w-3 h-3 text-slate-400" />
-                </div>
-              </Link>
-            )
-          })}
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>

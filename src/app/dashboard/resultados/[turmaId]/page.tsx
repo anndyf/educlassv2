@@ -26,7 +26,7 @@ async function getNotasResultados(turmaId: string) {
         nf."disciplina_id" as "disciplinaId",
         d.nome as "disciplinaNome"
       FROM "notas_finais" nf
-      INNER JOIN "estudantes" e ON e.id = nf."estudante_id"
+      INNER JOIN "estudantes" e ON e.matricula = nf."estudante_id"
       INNER JOIN "disciplinas" d ON d.id = nf."disciplina_id"
       WHERE e."turma_id" = ${turmaId}
     `

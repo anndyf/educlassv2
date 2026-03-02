@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -10,6 +11,24 @@ declare module 'jspdf' {
   interface jsPDF {
     autoTable: (options: any) => jsPDF
   }
+}
+
+function abreviarNome(nome: string) {
+    const nomeUpper = nome.toUpperCase()
+    const mapa: Record<string, string> = {
+      'ALGORITMOS E LINGUAGEM DE PROGRAMAÇÃO': 'ALGORITMOS',
+      'FUNDAMENTOS DA COMPUTAÇÃO': 'FUND. COMP.',
+      'INICIAÇÃO CIENTÍFICA': 'INIC. CIENT.',
+      'LÍNGUA PORTUGUESA': 'PORTUGUÊS',
+      'EDUCAÇÃO FÍSICA': 'ED. FÍSICA',
+      'BANCO DE DADOS': 'B. DADOS',
+      'EDUCAÇÃO DIGITAL E MIDIÁTICA': 'ED. DIGITAL',
+      'HISTÓRIA DA BAHIA': 'HIST. BAHIA',
+      'FUNDAMENTOS DE ARQUITETURA DE COMPUTADORES': 'ARQ. COMP.',
+      'PROJETO TECNOLOGIAS SOCIAIS': 'TEC. SOCIAIS'
+    }
+    if (mapa[nomeUpper]) return mapa[nomeUpper]
+    return nome.length > 20 ? nome.substring(0, 17) + '...' : nome.toUpperCase()
 }
 
 function getStatusAbbr(status: string) {
@@ -64,31 +83,8 @@ export async function GET(
     // Criar PDF em formato paisagem
     const doc = new jsPDF('landscape')
 
-    // Cabeçalho
-    doc.setFontSize(18)
-    doc.setFont('helvetica', 'bold')
-    doc.text('RELATÓRIO DE STATUS POR DISCIPLINA', 148, 15, { align: 'center' })
-    
-    doc.setFontSize(12)
-    doc.setFont('helvetica', 'normal')
-    doc.text('EduClass - CETEP/LNAB', 148, 22, { align: 'center' })
-
-    // Informações da Turma
-    doc.setFontSize(11)
-    doc.setFont('helvetica', 'bold')
-    doc.text('Turma:', 20, 32)
-    doc.setFont('helvetica', 'normal')
-    doc.text(turma.nome, 45, 32)
-
-    // Legenda
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
-    doc.text('Legenda:', 20, 40)
-    doc.setFont('helvetica', 'normal')
-    doc.text('AP=Aprovado | RC=Recuperação | AR=Aprov.Recup. | AC=Aprov.Conselho | DP=Dependência | DS=Desistente | CO=Conservado', 45, 40)
-
     // Preparar dados da tabela
-    const headers = ['#', 'Estudante', ...turma.disciplinas.map(d => d.nome)]
+    const headers = ['Nº', 'NOME DO ALUNO', ...turma.disciplinas.map(d => abreviarNome(d.nome))]
     
     const tableData = turma.estudantes.map((estudante, index) => {
       const notasMap = new Map(
@@ -97,7 +93,7 @@ export async function GET(
 
       const row = [
         (index + 1).toString(),
-        estudante.nome,
+        estudante.nome.toUpperCase(),
         ...turma.disciplinas.map(disc => {
           const nota = notasMap.get(disc.id)
           return nota ? getStatusAbbr(nota.status) : '-'
@@ -109,51 +105,69 @@ export async function GET(
 
     // Criar tabela
     autoTable(doc, {
-      startY: 48,
+      startY: 55, // Mais espaço para a legenda
+      margin: { top: 25 }, // Margem para cabeçalho nas próximas páginas
       head: [headers],
       body: tableData,
       theme: 'grid',
       headStyles: {
         fillColor: [255, 255, 255],
-        textColor: 0,
+        textColor: [71, 85, 105],
         fontStyle: 'bold',
         halign: 'center',
-        fontSize: 8,
-        minCellHeight: 40
+        valign: 'middle',
+        fontSize: 7,
+        minCellHeight: 40,
+        lineWidth: 0.1,
+        lineColor: [226, 232, 240]
       },
       bodyStyles: {
         fontSize: 8,
-        halign: 'center'
+        halign: 'center',
+        valign: 'middle',
+        textColor: [15, 23, 42],
+        lineWidth: 0.1,
+        lineColor: [226, 232, 240],
+        minCellHeight: 10
       },
       columnStyles: {
-        0: { halign: 'center', cellWidth: 10 },
-        1: { halign: 'left', cellWidth: 50 }
+        0: { halign: 'center', cellWidth: 10, fontStyle: 'bold' },
+        1: { halign: 'left', cellWidth: 65, fontStyle: 'bold' }
       },
       didParseCell: function(data: any) {
-        // Centralizar cabeçalho "Estudante"
-        if (data.section === 'head' && data.column.index === 1) {
-          data.cell.styles.halign = 'center'
-          data.cell.styles.valign = 'middle'
-        }
-
-        // Ocultar texto padrão do cabeçalho das disciplinas para desenhar manual
         if (data.section === 'head' && data.column.index > 1) {
-          data.cell.text = []
+          data.cell.text = [] 
         }
 
         if (data.section === 'body' && data.column.index > 1) {
           const status = data.cell.raw
-          if (status === 'AP' || status === 'AR' || status === 'AC') {
-            data.cell.styles.textColor = [22, 163, 74]
-            data.cell.styles.fontStyle = 'bold'
-          } else if (status === 'RC') {
-            data.cell.styles.textColor = [234, 88, 12]
-            data.cell.styles.fontStyle = 'bold'
+          
+          // Forçar alinhamento vertical no meio
+          data.cell.styles.valign = 'middle'
+
+          if (status === 'RC') {
+             // Destaque APENAS para Recuperação (Fundo Laranja - sai cinza na impressão PB, mas destaca)
+             data.cell.styles.fillColor = [249, 115, 22] // Orange 500
+             data.cell.styles.textColor = [255, 255, 255]
+             data.cell.styles.fontStyle = 'bold'
+          } else if (['AP', 'AC', 'AR'].includes(status)) {
+             // Aprovados: Fundo Branco, Texto Preto
+             data.cell.styles.fillColor = [255, 255, 255]
+             data.cell.styles.textColor = [0, 0, 0]
+             data.cell.styles.fontStyle = 'bold'
           } else if (status === 'DP') {
-            data.cell.styles.textColor = [220, 38, 38]
-            data.cell.styles.fontStyle = 'bold'
-          } else if (status === 'DS' || status === 'DS_U' || status === 'CO') {
-            data.cell.styles.textColor = [107, 114, 128]
+             // Dependência: Fundo Branco, Texto Preto
+             data.cell.styles.fillColor = [255, 255, 255]
+             data.cell.styles.textColor = [0, 0, 0]
+             data.cell.styles.fontStyle = 'bold'
+          } else if (['DS', 'DS_U', 'CO'].includes(status)) {
+             // Desistente/Conservado: Fundo Branco, Texto Cinza Escuro
+             data.cell.styles.fillColor = [255, 255, 255]
+             data.cell.styles.textColor = [100, 100, 100]
+          } else {
+             // Padrão Branco, Texto Preto
+             data.cell.styles.fillColor = [255, 255, 255]
+             data.cell.styles.textColor = [0, 0, 0]
           }
         }
       },
@@ -162,26 +176,129 @@ export async function GET(
           const doc = data.doc
           const text = String(data.cell.raw)
           
-          doc.setTextColor(0, 0, 0)
-          doc.setFontSize(8)
+          doc.setTextColor(51, 65, 85)
+          doc.setFontSize(7)
+          doc.setFont('helvetica', 'bold')
           
           // Desenhar texto vertical (90 graus)
-          // Ajuste fino de posição: x no centro da célula, y na base
-          doc.text(text, data.cell.x + data.cell.width / 2 + 1, data.cell.y + data.cell.height - 3, { angle: 90 })
+          doc.text(text, data.cell.x + data.cell.width / 2 + 1, data.cell.y + data.cell.height - 4, { angle: 90 })
         }
       }
     })
+    
+    // Adicionar Rodapé, Cabeçalho e Numeração de Páginas (Pós-processamento)
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        const pageSize = doc.internal.pageSize;
+        const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+        const pageWidth = pageSize.width ? pageSize.width : pageSize.getWidth();
+        
+        if (i === 1) {
+            // Texto Superior Esquerdo
+            doc.setFontSize(7);
+            doc.setTextColor(100);
+            doc.setFont('helvetica', 'bold');
+            doc.text("CENTRO TERRITORIAL DE EDUCAÇÃO PROFISSIONAL DO LITORAL NORTE E AGRESTE BAIANO", 15, 15);
 
-    // Rodapé
-    const finalY = (doc as any).lastAutoTable.finalY || 48
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'italic')
-    doc.text(
-      `Documento gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`,
-      148,
-      finalY + 10,
-      { align: 'center' }
-    )
+            // Linha "EduClass | Título"
+            doc.setFontSize(16);
+            doc.setTextColor(37, 99, 235); // Blue 600
+            doc.text("EduClass", 15, 23);
+           
+            doc.setTextColor(200); // Gray
+            doc.text("|", 45, 23);
+
+            doc.setTextColor(15, 23, 42); // Black
+            doc.text("Relatório de Status Geral", 50, 23);
+
+            // Subtítulo do Curso/Turno (Esquerda, abaixo do título)
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.setFont('helvetica', 'normal');
+            const cursoInfo = `${turma.curso || ''} - ${turma.turno || ''}`;
+            doc.text(cursoInfo, 15, 30);
+             
+            // Data de Impressão
+            doc.setFontSize(8);
+            doc.setTextColor(150);
+            const dateStr = `Impresso em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR').substring(0,5)}`;
+            doc.text(dateStr, 15, 35);
+
+            // --- LADO DIREITO ---
+
+            // Nome da Turma (Canto Direito Superior)
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(0);
+            doc.text(turma.nome, pageWidth - 15, 15, { align: 'right' });
+
+            // LEGENDA (Abaixo da Turma, alinhada à direita)
+             const legendY = 25;
+             const itemHeight = 6;
+             
+             const legendItems = [
+                { code: 'AP', label: 'Aprovado', bg: [255, 255, 255], txt: [0, 0, 0], border: [200, 200, 200] },
+                { code: 'RC', label: 'Recuperação', bg: [249, 115, 22], txt: [255, 255, 255], border: [249, 115, 22] }
+             ];
+
+             let currentX = pageWidth - 15;
+             
+             [...legendItems].reverse().forEach(item => {
+                 doc.setFontSize(7);
+                 doc.setFont('helvetica', 'bold');
+                 
+                 const labelWidth = doc.getTextWidth(item.label);
+                 const codeWidth = 8;
+                 const gap = 1.5;
+                 const itemSpacing = 6;
+                 
+                 const totalItemWidth = codeWidth + gap + labelWidth;
+                 const startX = currentX - totalItemWidth;
+                 
+                 // Caixinha
+                 doc.setDrawColor(item.border[0], item.border[1], item.border[2]);
+                 doc.setFillColor(item.bg[0], item.bg[1], item.bg[2]);
+                 doc.roundedRect(startX, legendY, codeWidth, itemHeight, 1, 1, 'FD');
+                 
+                 // Texto Código
+                 doc.setTextColor(item.txt[0], item.txt[1], item.txt[2]);
+                 doc.text(item.code, startX + (codeWidth/2), legendY + 4, { align: 'center' });
+                 
+                 // Texto Label
+                 doc.setTextColor(80);
+                 doc.text(item.label, startX + codeWidth + gap, legendY + 4);
+                 
+                 currentX = startX - itemSpacing;
+             });
+             
+             doc.setFontSize(7);
+             doc.setTextColor(50);
+             doc.setFont('helvetica', 'bold');
+             doc.text("LEGENDA:", currentX - 10, legendY + 4);
+       } else {
+             // Cabeçalho Simplificado (Páginas Seguintes)
+             doc.setFontSize(10);
+             doc.setFont('helvetica', 'bold');
+             doc.setTextColor(100);
+             doc.text(turma.nome, pageWidth - 15, 15, { align: 'right' });
+       }
+
+        // Rodapé profissional
+        doc.setDrawColor(226, 232, 240);
+        doc.line(15, pageHeight - 15, pageWidth - 15, pageHeight - 15);
+
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(37, 99, 235); // Blue 600
+        doc.text('EduClass', 15, pageHeight - 10);
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text('Sistema de Gestão Acadêmica', 30, pageHeight - 10);
+        
+        doc.text(`Página ${i} de ${totalPages}`, pageWidth - 15, pageHeight - 10, { align: 'right' });
+    }
 
     // Gerar PDF como buffer
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'))

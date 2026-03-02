@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { logAudit } from '@/lib/audit'
 
 export const runtime = 'nodejs'
 
 // PUT update estudante
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth()
@@ -16,7 +17,7 @@ export async function PUT(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
-    const { nome, turmaId } = await request.json()
+    const { nome, turmaId, matricula } = await request.json()
 
     if (!nome || nome.trim() === '') {
       return NextResponse.json(
@@ -32,13 +33,24 @@ export async function PUT(
       )
     }
 
+    const { id } = await context.params
+
     const estudante = await prisma.estudante.update({
-      where: { id: params.id },
+      where: { matricula: id },
       data: {
         nome: nome.trim(),
-        turmaId
+        turmaId,
+        matricula: matricula || id
       }
     })
+
+    await logAudit(
+      session.user.id,
+      'ESTUDANTE', 
+      estudante.matricula,
+      'UPDATE',
+      { nome: estudante.nome, context: 'ESTUDANTE' }
+    )
 
     return NextResponse.json(estudante)
   } catch (error) {
@@ -53,7 +65,7 @@ export async function PUT(
 // DELETE estudante
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth()
@@ -62,9 +74,11 @@ export async function DELETE(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await context.params
+
     // Verificar se há notas vinculadas
     const estudante = await prisma.estudante.findUnique({
-      where: { id: params.id },
+      where: { matricula: id },
       include: {
         _count: {
           select: {
@@ -86,8 +100,16 @@ export async function DELETE(
     }
 
     await prisma.estudante.delete({
-      where: { id: params.id }
+      where: { matricula: id }
     })
+
+    await logAudit(
+      session.user.id,
+      'ESTUDANTE', 
+      id,
+      'DELETE',
+      { nome: estudante.nome, context: 'ESTUDANTE_DELETE' }
+    )
 
     return NextResponse.json({ message: 'Estudante excluído com sucesso' })
   } catch (error) {

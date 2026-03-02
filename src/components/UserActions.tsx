@@ -78,13 +78,13 @@ export default function UserActions({
 
   const handleToggleActive = async () => {
     const action = isActive ? 'pausar' : 'reativar'
-    if (!confirm(`Deseja realmente ${action} o acesso do usuário ${userName}?`)) {
+    if (!confirm(`Deseja realmente ${action} o acesso do usuário ${userName}? \n\n${isActive ? 'O usuário verá um aviso de "Sistema em Manutenção/Conta Pausada" ao tentar logar.' : 'O usuário voltará a ter acesso normal ao sistema.'}`)) {
       return
     }
 
     setLoading(true)
     try {
-      const res = await fetch(`/api/usuarios/${userId}`, {
+      const res = await fetch(`/api/usuarios/${userId}/toggle-status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -94,6 +94,7 @@ export default function UserActions({
 
       if (res.ok) {
         router.refresh()
+        alert(`Usuário ${isActive ? 'pausado' : 'reativado'} com sucesso!`)
       } else {
         const error = await res.json()
         alert(error.message || `Erro ao ${action} usuário`)

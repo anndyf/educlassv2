@@ -139,11 +139,11 @@ export default function TransferModal({ isOpen, onClose, fromUserId, fromUserNam
             {fetchingUsers && <p className="text-[10px] text-indigo-600 font-bold animate-pulse">Carregando usuários...</p>}
           </div>
 
-          <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 space-y-2">
+          <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 space-y-2 overflow-hidden">
             <h4 className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2">
               ⚠️ Observação Crítica
             </h4>
-            <p className="text-[11px] text-amber-700 font-medium leading-relaxed">
+            <p className="text-[11px] text-amber-700 font-medium leading-relaxed whitespace-normal break-words">
               Esta ação transferirá permanentemente a autoria de todas as notas e registros. 
               O usuário de origem será <span className="font-bold underline">desativado</span> por segurança.
             </p>

@@ -1,0 +1,170 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { X, Loader2, Copy, AlertTriangle } from "lucide-react"
+
+interface CloneTurmaModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: (data: { nome: string, turno: string, numero: number }) => Promise<void>
+  turmaOriginal: { id: string, nome: string, turno: string | null } | null
+}
+
+export default function CloneTurmaModal({ 
+    isOpen, 
+    onClose, 
+    onConfirm, 
+    turmaOriginal 
+}: CloneTurmaModalProps) {
+  const [nome, setNome] = useState("")
+  const [turno, setTurno] = useState("")
+  const [numero, setNumero] = useState(1)
+  const [loading, setLoading] = useState(false)
+
+  const turnos = ["Matutino", "Vespertino", "Noturno", "Integral"]
+
+  useEffect(() => {
+    if (turmaOriginal && isOpen) {
+      // 1TIM1 -> Serie: 1, Curso: I, Turno: M, Numero: 1
+      const match = turmaOriginal.nome.match(/^(\d+)T([A-Z]+)([MVNI])(\d+)(.*)$/)
+      if (match) {
+        const [_, serie, cursoSigla, turnoSigla, numOriginal, sufixo] = match
+        const turnoMap: Record<string, string> = { 
+            "M": "Matutino", 
+            "V": "Vespertino", 
+            "N": "Noturno", 
+            "I": "Integral" 
+        }
+        const currentTurno = turnoMap[turnoSigla] || "Matutino"
+        setTurno(currentTurno)
+        setNumero(parseInt(numOriginal))
+        setNome(turmaOriginal.nome)
+      } else {
+        setTurno(turmaOriginal.turno || "Matutino")
+        setNumero(1)
+        setNome(`${turmaOriginal.nome} (CLONE)`)
+      }
+    }
+  }, [turmaOriginal, isOpen])
+
+  // Efeito para atualizar o nome automaticamente ao mudar turno ou número
+  useEffect(() => {
+    if (turmaOriginal && isOpen) {
+      const match = turmaOriginal.nome.match(/^(\d+)T([A-Z]+)([MVNI])(\d+)(.*)$/)
+      if (match) {
+        const [_, serie, cursoSigla, turnoSigla, numOriginal, sufixo] = match
+        const reverseTurnoMap: Record<string, string> = { 
+            "Matutino": "M", 
+            "Vespertino": "V", 
+            "Noturno": "N", 
+            "Integral": "I" 
+        }
+        const tSigla = reverseTurnoMap[turno] || "M"
+        setNome(`${serie}T${cursoSigla}${tSigla}${numero}${sufixo}`)
+      }
+    }
+  }, [turno, numero, turmaOriginal, isOpen])
+
+  if (!isOpen) return null
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await onConfirm({ nome, turno, numero })
+      onClose()
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-100 flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between p-6 border-b border-slate-50 bg-slate-50/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+              <Copy className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Clonar Turma</h3>
+              <p className="text-xs text-slate-500 font-medium">{turmaOriginal?.nome}</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-2 hover:bg-white rounded-xl transition-colors text-slate-400 hover:text-slate-600 shadow-sm"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
+              As disciplinas serão copiadas, mas <span className="font-bold underline">vínculos com professores e alunos não serão mantidos</span>. 
+              A nova turma nascerá limpa.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Novo Turno</label>
+                <select
+                  value={turno}
+                  onChange={(e) => setTurno(e.target.value)}
+                  className="w-full bg-slate-50 border-none rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500 transition-all"
+                >
+                  {turnos.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nomenclatura (Número)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="9"
+                  value={numero}
+                  onChange={(e) => setNumero(parseInt(e.target.value))}
+                  className="w-full bg-slate-50 border-none rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500 transition-all font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nome Final da Turma</label>
+              <input
+                type="text"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                className="w-full bg-slate-50 border-none rounded-xl px-4 py-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 transition-all uppercase tracking-wider font-mono shadow-inner"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 px-4 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-50 transition-colors border border-slate-100"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !nome}
+              className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <Copy size={18} />}
+              Confirmar Clone
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}

@@ -22,8 +22,8 @@ export const authConfig: NextAuthConfig = {
         const user = await prisma.user.findFirst({
           where: {
             OR: [
-              { username: credentials.username as string },
-              { email: credentials.username as string }
+              { username: { equals: credentials.username as string, mode: 'insensitive' } },
+              { email: { equals: credentials.username as string, mode: 'insensitive' } }
             ]
           }
         })
@@ -57,7 +57,9 @@ export const authConfig: NextAuthConfig = {
           username: user.username,
           isSuperuser: user.isSuperuser,
           isDirecao: user.isDirecao,
-          isStaff: user.isStaff
+          isStaff: user.isStaff,
+          isPortalUser: user.isPortalUser,
+          estudanteId: user.estudanteId
         }
       }
     })
@@ -70,6 +72,8 @@ export const authConfig: NextAuthConfig = {
         token.isSuperuser = (user as any).isSuperuser
         token.isDirecao = (user as any).isDirecao
         token.isStaff = (user as any).isStaff
+        token.isPortalUser = (user as any).isPortalUser
+        token.estudanteId = (user as any).estudanteId
       }
       return token
     },
@@ -80,6 +84,8 @@ export const authConfig: NextAuthConfig = {
         session.user.isSuperuser = token.isSuperuser as boolean
         session.user.isDirecao = token.isDirecao as boolean
         session.user.isStaff = token.isStaff as boolean
+        session.user.isPortalUser = token.isPortalUser as boolean
+        session.user.estudanteId = token.estudanteId as string
       }
       return session
     }

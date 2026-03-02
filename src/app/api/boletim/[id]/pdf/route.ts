@@ -26,7 +26,7 @@ export async function GET(
     const { id } = await params
 
     const estudante = await prisma.estudante.findUnique({
-      where: { id },
+      where: { matricula: id },
       include: {
         turma: true,
         notas: {
