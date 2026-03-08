@@ -13,7 +13,7 @@ async function main() {
     create: {
       email: 'admin@cetep.edu.br',
       username: 'admin',
-      name: 'Administrador do Sistema',
+      name: 'Admin',
       password: hashedPassword,
       isSuperuser: true,
       isStaff: true,
@@ -23,10 +23,11 @@ async function main() {
     },
   });
 
-  console.log('--- USUÁRIO ADMINISTRADOR CRIADO COM SUCESSO ---');
-  console.log('Login: admin@cetep.edu.br');
+  console.log('--- USUÁRIO ADMINISTRADOR ATUALIZADO ---');
+  console.log('Login (Usuário): admin');
+  console.log('Login (E-mail): admin@cetep.edu.br');
   console.log('Senha: admin123');
-  console.log('----------------------------------------------');
+  console.log('---------------------------------------');
 }
 
 main()
